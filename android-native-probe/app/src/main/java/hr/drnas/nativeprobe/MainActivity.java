@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity implements SurfaceHolder.Callback {
     static { System.loadLibrary("drnas_vulkan"); }
@@ -36,7 +37,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private native String nativeVulkanDraw(Surface surface);
     private native void nativeInput(int action, float x, float y, float value);
     // action: 1=move, 2=LMB down, 3=LMB up, 4=RMB down,
-    // 5=RMB up, 6=zoom delta. This is a test input bridge, not GHOST yet.
+    // 5=RMB up, 6=zoom delta. Native FIFO feeds the future Android GHOST backend.
 
     private FrameLayout root;
     private SurfaceView canvas;
@@ -45,6 +46,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private boolean surfaceReady = false;
     private int session = 0;
     private boolean fullscreen = true;
+    private final AtomicBoolean rendering = new AtomicBoolean(false);
     private int zoomPrevious = 50;
     private StringBuilder diagnostics = new StringBuilder();
     private final int white = Color.rgb(231, 239, 249);
@@ -117,7 +119,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         hp.setMargins(dp(8), dp(6), dp(8), 0);
         root.addView(header, hp);
 
-        TextView title = label("DRNAS  •  NATIVE VULKAN LAB", 16);
+        TextView title = label("DRNAS  •  NATIVE GUI BRIDGE LAB", 16);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         header.addView(title, new LinearLayout.LayoutParams(0, -1, 1));
         addHeaderButton(header, "VULKAN", () -> renderVulkan());
@@ -131,7 +133,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         addHeaderButton(header, "COPY", this::copyLog);
 
         TextView legend = label(
-            "Vulkan Surface • Android NDK • ARM64 | GHOST / Blender viewport: još nije povezan", 12);
+            "Vulkan Surface • ARM64 • GHOST-ready input FIFO | Blender viewport: nije povezan", 12);
         legend.setBackground(bubble(Color.argb(200, 18, 27, 40), 9));
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, dp(33), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         lp.topMargin = dp(62);
@@ -151,7 +153,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         root.addView(status, sp);
         setContentView(root);
         log("Android SDK " + Build.VERSION.SDK_INT + ", ABIs " + Arrays.toString(Build.SUPPORTED_ABIS));
-        log("Native Vulkan površina i dodirni UI spremni za test.");
+        log("Native Vulkan površina + GHOST-ready input FIFO spremni za test.");
     }
     private void addHeaderButton(LinearLayout row, String text, Runnable run) {
         Button b = new Button(this);
@@ -257,6 +259,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             log("Vulkan: površina nije spremna");
             return;
         }
+        if (!rendering.compareAndSet(false, true)) {
+            log("Vulkan: render je već aktivan, preskačem dvostruki zahtjev.");
+            return;
+        }
         final int attempt = ++session;
         Surface surface = canvas.getHolder().getSurface();
         log("Vulkan: stvaranje Android surface / swapchain...");
@@ -264,9 +270,20 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             String result;
             try { result = nativeVulkanDraw(surface); }
             catch (Throwable e) { result = "JNI Vulkan error: " + e; }
+            finally { rendering.set(false); }
             final String finalResult = result;
             runOnUiThread(() -> { if (attempt == session) log(finalResult); });
         }, "DRNAS-Vulkan").start();
+    }
+    @Override protected void onPause() {
+        // Avoid sticky mouse-down when Android backgrounds the Activity.
+        nativeInput(3, 0, 0, 0);
+        nativeInput(5, 0, 0, 0);
+        super.onPause();
+    }
+    @Override protected void onDestroy() {
+        session++; // invalidate queued log callbacks after teardown
+        super.onDestroy();
     }
     private void copyLog() {
         ((ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE))

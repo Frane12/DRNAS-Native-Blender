@@ -141,9 +141,9 @@ jobs:
           git -C /tmp/boost-src submodule update --init --depth 1 tools/build libs/config libs/core libs/assert libs/static_assert libs/type_traits libs/mpl libs/preprocessor libs/throw_exception libs/smart_ptr libs/integer libs/move libs/utility libs/iterator libs/functional libs/bind libs/concept_check libs/array libs/container_hash libs/describe libs/detail libs/io libs/optional libs/variant libs/system libs/filesystem libs/thread libs/atomic libs/chrono libs/date_time libs/algorithm libs/range libs/serialization libs/regex
           cd /tmp/boost-src
           ./bootstrap.sh --with-libraries=filesystem,thread
-          cat > android-arm64.jam <<'JAM'
-          using clang : android : "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++" ;
-          JAM
+          NDK_CLANG="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
+          test -x "$NDK_CLANG"
+          printf 'using clang : android : "%s" ;\n' "$NDK_CLANG" > android-arm64.jam
           ./b2 --user-config=android-arm64.jam toolset=clang-android target-os=android architecture=arm address-model=64 link=static threading=multi variant=release --prefix=/tmp/android-deps install -j4
       - name: Cross-compile required OpenImageIO for Android ARM64
         run: |

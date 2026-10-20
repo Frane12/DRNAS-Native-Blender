@@ -312,15 +312,26 @@ jobs:
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF
           cmake --build /tmp/blender-host --target makesdna datatoc --parallel 4
           file /tmp/blender-host/bin/makesdna /tmp/blender-host/bin/datatoc
-          # Use native host tools only for generated-source custom commands.
+          # Imported host executables satisfy target dependencies without
+          # trying to link Android versions of the build-time generators.
           python3 - <<'PY'
           from pathlib import Path
-          for tool in ("makesdna", "datatoc"):
-              for p in Path("/tmp/blender-src").rglob("CMakeLists.txt"):
-                  data = p.read_text()
-                  old = f'"$<TARGET_FILE:{tool}>"'
-                  if old in data:
-                      p.write_text(data.replace(old, f'"/tmp/blender-host/bin/{tool}"'))
+          root = Path("/tmp/blender-src")
+          dna = root / "source/blender/makesdna/intern/CMakeLists.txt"
+          s = dna.read_text()
+          begin = s.index("add_cc_flags_custom_test(makesdna)")
+          end = s.index("# Output dna.cc", begin)
+          s = s[:begin] + '''add_executable(makesdna IMPORTED GLOBAL)
+          set_target_properties(makesdna PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/makesdna")
+
+          ''' + s[end:]
+          dna.write_text(s)
+          toc = root / "source/blender/datatoc/CMakeLists.txt"
+          s = toc.read_text()
+          old = "add_executable(datatoc ${SRC})\\noptimize_debug_target(datatoc)"
+          assert old in s
+          toc.write_text(s.replace(old, '''add_executable(datatoc IMPORTED GLOBAL)
+          set_target_properties(datatoc PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/datatoc")'''))
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile

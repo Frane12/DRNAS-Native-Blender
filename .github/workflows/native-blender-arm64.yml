@@ -396,6 +396,24 @@ jobs:
           uuid_src.write_text(s.replace(old, "#if defined(__APPLE__) || defined(__ANDROID__)"))
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
+      - name: Remove Linux-only link flags from Android Ninja target
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          ninja = Path('/tmp/blender-android/build.ninja')
+          content = ninja.read_text()
+          # Blender's generic UNIX platform config adds libutil and a Linux
+          # symbol export script. Neither belongs in a Bionic ARM64 link.
+          assert ' -lutil ' in content, 'Missing expected Linux libutil flag (check Blender CMake)'
+          content = content.replace(' -lutil ', ' ')
+          content, count = re.subn(r" -Wl,--version-script='[^']+'", '', content)
+          assert count > 0, 'Missing expected Linux ELF version-script flag (check Blender CMake)'
+          ninja.write_text(content)
+          assert ' -lutil ' not in ninja.read_text()
+          print(f'Android linker preflight: removed libutil and {count} Linux version scripts')
+          PY
       - name: Attempt actual native Blender target compile
         run: |
           set -euxo pipefail

@@ -169,6 +169,17 @@ jobs:
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             2>&1 | tee native-results/blender-configure.log
+      - name: Remove Linux libutil from Android generator targets
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/blender-android/build.ninja')
+          s = p.read_text()
+          # Linux-only libutil is unavailable in Android bionic.
+          assert ' -lutil ' in s, 'Expected Linux libutil linker flag missing'
+          p.write_text(s.replace(' -lutil ', ' '))
+          PY
       - name: Attempt actual native Blender target compile
         run: |
           set -euxo pipefail

@@ -104,6 +104,18 @@ jobs:
           meson install -C /tmp/epoxy-build
           test -f /tmp/android-deps/include/epoxy/gl.h
           test -f /tmp/android-deps/lib/libepoxy.a
+      - name: Cross-compile Brotli for Android ARM64
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch v1.1.0 https://github.com/google/brotli.git /tmp/brotli-src
+          cmake -S /tmp/brotli-src -B /tmp/brotli-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
+            -DBUILD_SHARED_LIBS=OFF -DBROTLI_DISABLE_TESTS=ON
+          cmake --build /tmp/brotli-build --parallel 4
+          cmake --install /tmp/brotli-build
+          test -f /tmp/android-deps/lib/libbrotlidec.a
       - name: Cross-compile FreeType for Android ARM64
         run: |
           set -euxo pipefail
@@ -113,7 +125,9 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
             -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BZIP2=ON \
+            -DFT_REQUIRE_BROTLI=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BZIP2=ON \
+            -DBROTLIDEC_INCLUDE_DIRS=/tmp/android-deps/include \
+            '-DBROTLIDEC_LIBRARIES=/tmp/android-deps/lib/libbrotlidec.a;/tmp/android-deps/lib/libbrotlicommon.a' \
             -DFT_DISABLE_PNG=ON -DFT_DISABLE_ZLIB=ON
           cmake --build /tmp/freetype-build --parallel 4
           cmake --install /tmp/freetype-build

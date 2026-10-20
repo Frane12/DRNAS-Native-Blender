@@ -163,16 +163,7 @@ jobs:
             -Djpeg=ON -Dzlib=ON -Dwebp=OFF -Dzstd=OFF -Dlzma=OFF
           cmake --build /tmp/tiff-build --parallel 4
           cmake --install /tmp/tiff-build
-          # OpenImageIO 2.5 requests OpenEXR CONFIG; locate the actual staged config.
-          OPENEXR_CONFIG="$(find /tmp/android-deps -type f -name OpenEXRConfig.cmake -print -quit)"
-          IMATH_CONFIG="$(find /tmp/android-deps -type f -name ImathConfig.cmake -print -quit)"
-          test -n "$OPENEXR_CONFIG"
-          test -n "$IMATH_CONFIG"
-          OPENEXR_DIR="$(dirname "$OPENEXR_CONFIG")"
-          IMATH_DIR="$(dirname "$IMATH_CONFIG")"
-          echo "OpenEXR CMake config: $OPENEXR_DIR"
-          echo "Imath CMake config: $IMATH_DIR"
-                    test -f /tmp/android-deps/lib/libtiff.a
+          test -f /tmp/android-deps/lib/libtiff.a
       - name: Cross-compile Imath and OpenEXR for OpenImageIO
         run: |
           set -euxo pipefail
@@ -198,7 +189,16 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth 1 --branch v2.5.16.0 https://github.com/AcademySoftwareFoundation/OpenImageIO.git /tmp/oiio-src
-          # OIIO 2.5 uses Boost CONFIG with CMake >= 3.30.
+          # OpenImageIO 2.5 requests OpenEXR CONFIG; locate the actual staged config.
+          OPENEXR_CONFIG="$(find /tmp/android-deps -type f -name OpenEXRConfig.cmake -print -quit)"
+          IMATH_CONFIG="$(find /tmp/android-deps -type f -name ImathConfig.cmake -print -quit)"
+          test -n "$OPENEXR_CONFIG"
+          test -n "$IMATH_CONFIG"
+          OPENEXR_DIR="$(dirname "$OPENEXR_CONFIG")"
+          IMATH_DIR="$(dirname "$IMATH_CONFIG")"
+          echo "OpenEXR CMake config: $OPENEXR_DIR"
+          echo "Imath CMake config: $IMATH_DIR"
+                    # OIIO 2.5 uses Boost CONFIG with CMake >= 3.30.
           # b2 provides the Android archives but not BoostConfig.cmake: bridge them explicitly.
           test -f /tmp/android-deps/include/boost/version.hpp
           test -f /tmp/android-deps/lib/libboost_thread.a

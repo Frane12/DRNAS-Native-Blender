@@ -46,3 +46,42 @@ native ELF from run 39487417634, verifies ELF64/AArch64/PIE/Android interpreter,
 and strips debug symbols only from the APK copy. There is **no rerun of Blender's
 ~3200 native C/C++ compilation**. No release is published. The resulting APK
 is specifically named **Vulkan GUI LAB**.
+
+
+## GHOST-ready Android input bridge (experimental)
+
+Branch: `feature/native-android-ghost-input-bridge`.
+This is an isolated test application (`hr.drnas.nativeghost`) and **does not replace**
+the existing Vulkan LAB, headless native LAB or EmuDRNAS installations.
+
+- JNI passes LMB/RMB press/release, pointer motion and relative zoom to a
+  bounded 256-event native C queue (`ghost_input_bridge.c/.h`).
+- Events retain monotonic timestamps and current button state, preserving
+  order across mouse buttons and scroll changes.
+- Consecutive pointer moves are coalesced; overflow discards oldest events and
+  records the drop count instead of blocking Android's UI thread.
+- Host tests exercise queue ordering, coalescing, button combinations and
+  overflow under address/undefined behavior sanitizers before the APK build.
+- Native Vulkan drawing refuses overlapping swapchain requests; Android
+  backgrounding releases both virtual mouse buttons.
+- APK packages the previously compiled headless Blender ARM64 PIE from
+  successful run `39487417634`, no full Blender recompilation.
+
+**Graphics milestone not yet achieved:** The C queue is a transport for a
+*future* GHOST Android consumer. Blender v4.5.4 was compiled headless with
+`WITH_VULKAN_BACKEND=OFF`. It does not create a GHOST Android window,
+respond to these events, display Blender menus or render Blender's 3D
+viewport. The separate Vulkan test currently presents one solid-color frame.
+
+Next actual-viewport milestones:
+
+1. Port `GHOST_ISystem` + Android window/event backend into the Blender source
+   under a versioned patch and test its Android surface/context lifecycle.
+2. Wire GHOST's event consumer to the native queue, translating buttons,
+   pointer coordinates, motion, wheel and keyboard with Android focus changes.
+3. Enable Vulkan GPU backend and required shader dependencies in Blender's
+   Android cross-build, then hand off `VkSurfaceKHR` from native window.
+4. Rebuild Blender with GHOST Android, display Blender UI and default cube,
+   validate touch/zoom/render and suspend/resume on an actual ARM64 phone.
+
+CI workflow: `.github/workflows/native-ghost-input-lab.yml`.

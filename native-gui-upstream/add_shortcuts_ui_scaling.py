@@ -267,14 +267,19 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
 
     /* Android ACTION_SCROLL supports actual Bluetooth mouse wheels and
        stylus scroll. Normal scroll over Blender remains untouched. */
-    line.setOnGenericMotionListener((v, event) -> {
+    android.view.View.OnGenericMotionListener resizeOnWheel = (v, event) -> {
       if (event.getActionMasked() != android.view.MotionEvent.ACTION_SCROLL) return false;
       float delta = event.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL);
       if (delta == 0) return false;
       sizeSeek.setProgress(Math.max(0, Math.min(90,
           sizeSeek.getProgress() + (delta > 0 ? 5 : -5))));
       return true;
-    });
+    };
+    line.setOnGenericMotionListener(resizeOnWheel);
+    opener.setOnGenericMotionListener(resizeOnWheel);
+    settings.setOnGenericMotionListener(resizeOnWheel);
+    scroll.setOnGenericMotionListener(resizeOnWheel);
+    for (Button key : drnasSmallKeys) key.setOnGenericMotionListener(resizeOnWheel);
     options.addView(drnasUiLabel("VELIČINA BLENDER GUI (UI SCALE)"));
     final TextView guiLabel = drnasUiLabel("100%  • promjena nakon ponovnog pokretanja");
     options.addView(guiLabel);

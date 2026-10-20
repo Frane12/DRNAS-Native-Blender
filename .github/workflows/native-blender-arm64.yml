@@ -380,7 +380,7 @@ jobs:
           old = "#include <climits>"
           assert s.count(old) == 1
           s = s.replace(old, "#if defined(__ANDROID__)\n#  undef HAVE_EXECINFO_H\n#endif\n\n" + old)
-          assert "\\n" not in s, "Literal escaped newline in generated C++ source"
+          assert "#if defined(__ANDROID__)\\n" not in s, "Literal escaped newline in Android guard"
           system_src.write_text(s)
           mmap_src = root / "source/blender/blenlib/intern/BLI_mmap.cc"
           s = mmap_src.read_text()

@@ -256,16 +256,14 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
     options.addView(sizeValue);
     sizeSeek.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
       public void onProgressChanged(android.widget.SeekBar b, int p, boolean fromUser) {
-        if (fromUser) {
-          drnasButtonSizes(p + 60, true);
-          sizeValue.setText(drnasButtonPercent + "% • LMB/RMB + shortcut tipke");
-        }
+        drnasButtonSizes(p + 60, true);
+        sizeValue.setText(drnasButtonPercent + "% • LMB/RMB + shortcut tipke");
       }
       public void onStartTrackingTouch(android.widget.SeekBar b) {}
       public void onStopTrackingTouch(android.widget.SeekBar b) {}
     });
-    smaller.setOnClickListener(v -> sizeSeek.setProgress(Math.max(0, sizeSeek.getProgress() - 5), true));
-    larger.setOnClickListener(v -> sizeSeek.setProgress(Math.min(90, sizeSeek.getProgress() + 5), true));
+    smaller.setOnClickListener(v -> sizeSeek.setProgress(Math.max(0, sizeSeek.getProgress() - 5)));
+    larger.setOnClickListener(v -> sizeSeek.setProgress(Math.min(90, sizeSeek.getProgress() + 5)));
 
     /* Android ACTION_SCROLL supports actual Bluetooth mouse wheels and
        stylus scroll. Normal scroll over Blender remains untouched. */
@@ -274,7 +272,7 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
       float delta = event.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL);
       if (delta == 0) return false;
       sizeSeek.setProgress(Math.max(0, Math.min(90,
-          sizeSeek.getProgress() + (delta > 0 ? 5 : -5))), true);
+          sizeSeek.getProgress() + (delta > 0 ? 5 : -5))));
       return true;
     });
     options.addView(drnasUiLabel("VELIČINA BLENDER GUI (UI SCALE)"));

@@ -350,6 +350,13 @@ jobs:
 
           ''' + s[command:end] + s[end:]
           rna.write_text(s)
+          # Blender's RNA runtime assumes Python refcount helpers exist;
+          # this build explicitly disables Python, so guard that one call.
+          rna_define = root / "source/blender/makesrna/intern/rna_define.cc"
+          s = rna_define.read_text()
+          old = "    BPY_DECREF(srna->py_type);"
+          assert s.count(old) == 1
+          rna_define.write_text(s.replace(old, "#  ifdef WITH_PYTHON\\n" + old + "\\n#  endif"))
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile

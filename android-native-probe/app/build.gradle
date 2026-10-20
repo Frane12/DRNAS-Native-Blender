@@ -1,0 +1,25 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'hr.drnas.nativeprobe'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'hr.drnas.nativeprobe'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1-native-smoke'
+    }
+
+    packaging {
+        jniLibs {
+            // A native executable is packaged as lib*.so so Android installs
+            // it in an executable, app-owned nativeLibraryDir (no W^X violation).
+            useLegacyPackaging = true
+            keepDebugSymbols += ['**/libdrnas_smoke.so', '**/libblender.so']
+        }
+    }
+}

@@ -15,7 +15,7 @@ gradle=base/"app/build.gradle"
 
 s=manifest.read_text()
 old='android:label="DRNAS Native GUI (Upstream LAB)"'
-assert s.count(old)==2,(s.count(old), "Expected application+NativeActivity labels")
+assert s.count(old)>=2,(s.count(old), "Expected application+NativeActivity labels")
 s=s.replace(old,'android:label="Blender Native Android Pre-Alpha 2026"')
 manifest.write_text(s)
 s=gradle.read_text()

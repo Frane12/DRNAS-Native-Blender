@@ -39,12 +39,19 @@ jobs:
           python3 native-gui-upstream/add_drnas_controls.py upstream/build_files/android/apk
           python3 native-gui-upstream/patch_shortcut_ui_native.py upstream
           python3 native-gui-upstream/add_shortcuts_ui_scaling.py upstream
+          python3 native-gui-upstream/patch_adreno810_resolution.py upstream
+          python3 native-gui-upstream/add_drnas_splash.py upstream
+          python3 native-gui-upstream/add_adreno810_autoprofile.py upstream
+          python3 native-gui-upstream/set_pre_alpha_app_identity.py upstream
           grep -Fq 'void GHOST_SystemAndroid::dispatchDrnasInput' upstream/intern/ghost/intern/GHOST_SystemAndroid.cc
           grep -Fq 'nativeOnDrnasInput(7' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
           grep -Fq 'nativeOnDrnasInput(' upstream/intern/ghost/intern/GHOST_AndroidMain.cc
           grep -Fq 'DRNAS_ANDROID_UI_DPI' upstream/intern/ghost/intern/GHOST_AndroidMemoryTier.hh
           grep -Fq 'KEYCODE_F12' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
-          echo 'DRNAS Android shortcut/UI-size GHOST source preflight PASS'
+          grep -Fq 'DRNAS_A810_RENDER_LIMIT' upstream/intern/ghost/intern/GHOST_AndroidMemoryTier.hh
+          grep -Fq 'Blender Native Android Pre-Alpha 2026' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
+          grep -Fq 'DrnasGpuProfile.apply(this)' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+          echo 'DRNAS shortcuts / UI-scale / A810 render profile preflight PASS'
       - name: Compile modified Android Java without a full Blender build
         run: |
           set -euxo pipefail
@@ -54,4 +61,6 @@ jobs:
           fi
           mkdir -p /tmp/drnas-preflight-java
           javac --release 17 -classpath "$ANDROID_JAR" -d /tmp/drnas-preflight-java \
-            upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+            upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java \
+            upstream/build_files/android/apk/app/src/main/java/org/blender/blender/DrnasGpuProfile.java \
+            upstream/build_files/android/apk/app/src/main/java/org/blender/blender/DrnasSplashActivity.java

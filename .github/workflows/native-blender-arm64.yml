@@ -357,6 +357,11 @@ jobs:
           old = "    BPY_DECREF(srna->py_type);"
           assert s.count(old) == 1
           rna_define.write_text(s.replace(old, "#  ifdef WITH_PYTHON\n" + old + "\n#  endif"))
+          tooltip = root / "source/blender/editors/interface/regions/interface_region_tooltip.cc"
+          s = tooltip.read_text()
+          old = "UNUSED_VARS(is_label, has_valid_context, has_valid_context_error);"
+          assert s.count(old) == 1
+          tooltip.write_text(s.replace(old, "UNUSED_VARS(has_valid_context, has_valid_context_error);"))
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile

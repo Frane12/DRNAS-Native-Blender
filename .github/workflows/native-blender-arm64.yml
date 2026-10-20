@@ -310,8 +310,8 @@ jobs:
             -DWITH_LIBS_PRECOMPILED=OFF -DWITH_PYTHON=OFF \
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF
-          cmake --build /tmp/blender-host --target makesdna datatoc glsl_preprocess --parallel 4
-          file /tmp/blender-host/bin/makesdna /tmp/blender-host/bin/datatoc /tmp/blender-host/bin/glsl_preprocess
+          cmake --build /tmp/blender-host --target makesdna datatoc glsl_preprocess makesrna --parallel 4
+          file /tmp/blender-host/bin/makesdna /tmp/blender-host/bin/datatoc /tmp/blender-host/bin/glsl_preprocess /tmp/blender-host/bin/makesrna
           # Imported host executables satisfy target dependencies without
           # trying to link Android versions of the build-time generators.
           python3 - <<'PY'
@@ -338,6 +338,18 @@ jobs:
           assert old in s
           glsl.write_text(s.replace(old, '''add_executable(glsl_preprocess IMPORTED GLOBAL)
           set_target_properties(glsl_preprocess PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/glsl_preprocess")'''))
+          rna = root / "source/blender/makesrna/intern/CMakeLists.txt"
+          s = rna.read_text()
+          start = s.index("add_cc_flags_custom_test(makesrna)")
+          end = s.index("# Build bf_rna", start)
+          command = s.index("add_custom_command(", start)
+          # Keep generated-RNA command, but replace the cross-compiled executable
+          # and its link requirements with the native Linux tool.
+          s = s[:start] + '''add_executable(makesrna IMPORTED GLOBAL)
+          set_target_properties(makesrna PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/makesrna")
+
+          ''' + s[command:end] + s[end:]
+          rna.write_text(s)
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile

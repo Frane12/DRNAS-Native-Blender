@@ -226,7 +226,9 @@ jobs:
             set(PACKAGE_VERSION_EXACT TRUE)
           endif()
           BOOST_VERSION
-          cmake -S /tmp/oiio-src -B /tmp/oiio-build -G Ninja \
+          test -f /tmp/android-deps/lib/libtiff.a
+          test -f /tmp/android-deps/include/tiff.h
+                    cmake -S /tmp/oiio-src -B /tmp/oiio-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
@@ -236,7 +238,7 @@ jobs:
             -DUSE_OPENEXR=ON -DUSE_TIFF=ON -DUSE_WEBP=OFF \
             -DUSE_FFMPEG=OFF -DUSE_OPENCV=OFF -DUSE_QT=OFF \
             -DUSE_PUGIXML=OFF -DUSE_LIBRAW=OFF \
-            -DJPEG_ROOT=/tmp/android-deps -DPNG_ROOT=/tmp/android-deps -DTIFF_ROOT=/tmp/android-deps -DOpenEXR_ROOT=/tmp/android-deps
+            -DJPEG_ROOT=/tmp/android-deps -DPNG_ROOT=/tmp/android-deps -DTIFF_ROOT=/tmp/android-deps -DTIFF_INCLUDE_DIR=/tmp/android-deps/include -DTIFF_LIBRARY_RELEASE=/tmp/android-deps/lib/libtiff.a -DOpenEXR_ROOT=/tmp/android-deps
           cmake --build /tmp/oiio-build --parallel 4
           cmake --install /tmp/oiio-build
           test -f /tmp/android-deps/include/OpenImageIO/imageio.h

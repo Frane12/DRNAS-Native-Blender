@@ -32,7 +32,22 @@ jobs:
           set -euxo pipefail
           GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src
           git -C /tmp/blender-src rev-parse HEAD
-      - name: Report next native port requirements
+      - name: Probe official Blender lite and headless CMake configuration
         run: |
-          echo "Android ARM64 smoke binary verified. Blender source checked out."
-          echo "This is NOT a Blender binary or APK. Next: cross-compile Blender dependencies and actual headless Blender."
+          set -euxo pipefail
+          mkdir -p native-results
+          cmake -S /tmp/blender-src -B /tmp/blender-android -G Ninja \
+            -C /tmp/blender-src/build_files/cmake/config/blender_lite.cmake \
+            -C /tmp/blender-src/build_files/cmake/config/blender_headless.cmake \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DWITH_LIBS_PRECOMPILED=OFF -DWITH_PYTHON=OFF \
+            -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
+            -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
+            2>&1 | tee native-results/blender-configure.log
+      - name: Attempt actual native Blender target compile
+        run: |
+          set -euxo pipefail
+          cmake --build /tmp/blender-android --target blender --parallel 4 \
+            2>&1 | tee native-results/blender-build.log
+          find /tmp/blender-android -type f -name blender -exec file {} \;

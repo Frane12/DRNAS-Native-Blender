@@ -303,7 +303,7 @@ jobs:
           set -euxo pipefail
           # Cross-compiling Blender requires build-machine generators.
           # Build the host executable from the same pinned Blender source.
-          sudo apt-get install -y --no-install-recommends libfreetype-dev libjpeg-dev libpng-dev libzstd-dev libepoxy-dev
+          sudo apt-get install -y --no-install-recommends libfreetype-dev libjpeg-dev libpng-dev libzstd-dev libepoxy-dev libopenimageio-dev
           cmake -S /tmp/blender-src -B /tmp/blender-host -G Ninja \
             -C /tmp/blender-src/build_files/cmake/config/blender_lite.cmake \
             -C /tmp/blender-src/build_files/cmake/config/blender_headless.cmake \

@@ -189,14 +189,21 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth 1 --branch v2.5.16.0 https://github.com/AcademySoftwareFoundation/OpenImageIO.git /tmp/oiio-src
-          # OIIO 2.5 forces Boost CONFIG on CMake >=3.30, but b2 installs classic libraries.
+          # CMake 3.31 removed FindBoost; OIIO 2.5 requires classic FindBoost variables.
+          # Restore the CMake 3.30 module and give it explicit Android Boost paths.
+          curl -fsSL https://raw.githubusercontent.com/Kitware/CMake/v3.30.9/Modules/FindBoost.cmake -o /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
+          test -s /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
+          test -f /tmp/android-deps/include/boost/version.hpp
+          test -f /tmp/android-deps/lib/libboost_thread.a
+          test -f /tmp/android-deps/lib/libboost_filesystem.a
+                    # OIIO 2.5 forces Boost CONFIG on CMake >=3.30, but b2 installs classic libraries.
           # Permit FindBoost module lookup with the explicitly staged Android Boost archives.
           sed -i 's/if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.30")/if (FALSE)/' /tmp/oiio-src/src/cmake/externalpackages.cmake
           cmake -S /tmp/oiio-src -B /tmp/oiio-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
-            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBoost_ROOT=/tmp/android-deps -DBoost_NO_BOOST_CMAKE=ON -DCMAKE_POLICY_DEFAULT_CMP0167=OLD -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBoost_ROOT=/tmp/android-deps -DBoost_NO_BOOST_CMAKE=ON -DBoost_USE_STATIC_LIBS=ON -DBOOST_INCLUDEDIR=/tmp/android-deps/include -DBOOST_LIBRARYDIR=/tmp/android-deps/lib -DCMAKE_POLICY_DEFAULT_CMP0167=OLD -DBUILD_SHARED_LIBS=OFF \
             -DOIIO_BUILD_TOOLS=OFF -DOIIO_BUILD_TESTS=OFF -DOIIO_BUILD_DOCS=OFF \
             -DOIIO_BUILD_PYTHON=OFF -DUSE_PYTHON=OFF \
             -DUSE_OPENEXR=ON -DUSE_TIFF=ON -DUSE_WEBP=OFF \

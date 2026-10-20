@@ -34,6 +34,10 @@ jobs:
           python3 native-gui-upstream/patch_native_ghost.py upstream
           python3 native-gui-upstream/create_sdl3_gui_preview.py upstream/build_files/android/apk
           python3 native-gui-upstream/add_drnas_controls.py upstream/build_files/android/apk
+          python3 native-gui-upstream/fix_nested_host_tools.py upstream
+          python3 native-gui-upstream/add_drnas_splash.py upstream
+          grep -Fq 'DWITH_HEADLESS=ON' upstream/build_files/cmake/host_tools.cmake
+          grep -Fq 'DrnasSplashActivity' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
           python3 - <<'PY'
           from pathlib import Path
           p = Path('upstream/build_files/android/apk/app/src/main/AndroidManifest.xml')

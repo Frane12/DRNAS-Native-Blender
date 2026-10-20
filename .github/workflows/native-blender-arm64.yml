@@ -193,6 +193,10 @@ jobs:
           # Restore the CMake 3.30 module and give it explicit Android Boost paths.
           curl -fsSL https://raw.githubusercontent.com/Kitware/CMake/v3.30.9/Modules/FindBoost.cmake -o /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
           test -s /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
+          # The copied module uses CMAKE_CURRENT_LIST_DIR for CMake's own helper.
+          # Point that include at the installed CMake module directory instead.
+          sed -i 's|${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake|${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake|g' /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
+          grep -q 'CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake' /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
           test -f /tmp/android-deps/include/boost/version.hpp
           test -f /tmp/android-deps/lib/libboost_thread.a
           test -f /tmp/android-deps/lib/libboost_filesystem.a

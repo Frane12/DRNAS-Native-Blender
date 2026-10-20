@@ -379,7 +379,8 @@ jobs:
           s = system_src.read_text()
           old = "#include <climits>"
           assert s.count(old) == 1
-          s = s.replace(old, "#if defined(__ANDROID__)\\n#  undef HAVE_EXECINFO_H\\n#endif\\n\\n" + old)
+          s = s.replace(old, "#if defined(__ANDROID__)\n#  undef HAVE_EXECINFO_H\n#endif\n\n" + old)
+          assert "\\n" not in s, "Literal escaped newline in generated C++ source"
           system_src.write_text(s)
           mmap_src = root / "source/blender/blenlib/intern/BLI_mmap.cc"
           s = mmap_src.read_text()
@@ -394,3 +395,24 @@ jobs:
           cmake --build /tmp/blender-android --target blender --parallel 4 \
             2>&1 | tee native-results/blender-build.log
           find /tmp/blender-android -type f -name blender -exec file {} \;
+      - name: Verify and collect Android ARM64 Blender binary
+        run: |
+          set -euo pipefail
+          test -s /tmp/blender-android/bin/blender
+          cp /tmp/blender-android/bin/blender native-results/blender
+          file native-results/blender | tee native-results/blender-file.txt
+          readelf -h native-results/blender | tee native-results/blender-elf-header.txt
+          readelf -l native-results/blender | tee native-results/blender-program-headers.txt
+          readelf -d native-results/blender | tee native-results/blender-dynamic.txt
+          grep -q 'Machine:.*AArch64' native-results/blender-elf-header.txt
+          grep -q '/system/bin/linker64' native-results/blender-program-headers.txt
+          cd native-results
+          sha256sum blender > blender.sha256
+      - name: Upload native binary and build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drnas-native-blender-android-arm64-${{ github.run_id }}
+          path: native-results/
+          if-no-files-found: error
+          retention-days: 14

@@ -106,14 +106,14 @@ c = once(c, """    if (gesture_kind_ == GestureKind::Pan) {
                                      drnas_delta_remainder_zoom_);
     if (gesture_kind_ == GestureKind::Pan) {
       pushEvent(std::make_unique<GHOST_EventTrackpad>""")
-c = once(c, """                                                       int32_t(cx - gesture_prev_x_),
-                                                       int32_t(cy - gesture_prev_y_),""",
-         """                                                       sx,
-                                                       sy,""")
-c = once(c, """                                                       int32_t(dist - gesture_prev_dist_),
+c = once(c, """                                                      int32_t(cx - gesture_prev_x_),
+                                                      int32_t(cy - gesture_prev_y_),""",
+         """                                                      sx,
+                                                      sy,""")
+c = once(c, """                                                      int32_t(dist - gesture_prev_dist_),
                                                        0,
                                                        false));""",
-         """                                                       sz,
+         """                                                      sz,
                                                        0,
                                                        false));""")
 

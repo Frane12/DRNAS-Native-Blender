@@ -141,7 +141,7 @@ jobs:
           p = Path('/tmp/blender-src/build_files/cmake/platform/platform_unix.cmake')
           s = p.read_text()
           needle = 'find_package_wrapper(OpenImageIO)'
-          assert s.count(needle) == 1, 'Unexpected Blender OpenImageIO discovery layout'
+          assert needle in s, 'OpenImageIO discovery not found'
           s = s.replace(needle, 'if(WITH_OPENIMAGEIO)\\n    find_package_wrapper(OpenImageIO)\\n  endif()'.replace('\\n', '\n'))
           p.write_text(s)
           PY

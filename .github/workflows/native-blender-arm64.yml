@@ -261,6 +261,19 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p native-results
+          # Blender's FindOpenImageIO uses find_file(NO_DEFAULT_PATH), which
+          # gets re-rooted by the Android toolchain even for staged host paths.
+          # Seed the exact generated export.h before the find_file call.
+          test -f /tmp/android-deps/include/OpenImageIO/export.h
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/blender-src/build_files/cmake/Modules/FindOpenImageIO.cmake")
+          s = p.read_text()
+          needle = 'find_file(_openimageio_export\n'
+          assert s.count(needle) == 1
+          s = s.replace(needle, 'set(_openimageio_export "/tmp/android-deps/include/OpenImageIO/export.h")\nfind_file(_openimageio_export\n', 1)
+          p.write_text(s)
+          PY
           cmake -S /tmp/blender-src -B /tmp/blender-android -G Ninja \
             -C /tmp/blender-src/build_files/cmake/config/blender_lite.cmake \
             -C /tmp/blender-src/build_files/cmake/config/blender_headless.cmake \

@@ -5,7 +5,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: write
 jobs:
   android-arm64:
     runs-on: ubuntu-24.04
@@ -438,69 +437,25 @@ jobs:
           assert link_start - build_start < 16000, 'Unexpected Blender Ninja build edge'
           group = ' -Wl,--start-group ' + ' '.join(str(p) for p in archives) + ' -Wl,--end-group'
           content = content[:link_end] + group + content[link_end:]
-          # Blender's UNIX CMake link edge can force -no-pie after CMake's
-          # generic -pie flag. Patch only the final executable's link flags.
+          # Keep Android's final Blender executable position independent.
+          # Blender's generic UNIX link edge can add -no-pie after -pie.
+          # Restrict this fix to the Blender link edge only.
           edge_end = content.find('\nbuild ', build_start + 1)
           if edge_end < 0:
               edge_end = len(content)
           edge = content[build_start:edge_end]
-          flags_match = re.search(r'(?m)^  LINK_FLAGS = (.*)
-          assert ' -lutil ' not in ninja.read_text()
-          print(f'Android linker preflight: removed libutil, {count} Linux version scripts; resolved {len(archives)} staged ARM64 static archives for Blender')
-          PY
-      - name: Attempt actual native Blender target compile
-        run: |
-          set -euxo pipefail
-          cmake --build /tmp/blender-android --target blender --parallel 4 \
-            2>&1 | tee native-results/blender-build.log
-          find /tmp/blender-android -type f -name blender -exec file {} \;
-      - name: Verify and collect Android ARM64 Blender binary
-        run: |
-          set -euo pipefail
-          test -s /tmp/blender-android/bin/blender
-          cp /tmp/blender-android/bin/blender native-results/blender
-          file native-results/blender | tee native-results/blender-file.txt
-          readelf -h native-results/blender | tee native-results/blender-elf-header.txt
-          readelf -l native-results/blender | tee native-results/blender-program-headers.txt
-          readelf -d native-results/blender | tee native-results/blender-dynamic.txt
-          grep -q 'Machine:.*AArch64' native-results/blender-elf-header.txt
-          grep -q 'Type:.*DYN' native-results/blender-elf-header.txt
-          grep -q '/system/bin/linker64' native-results/blender-program-headers.txt
-          cd native-results
-          sha256sum blender > blender.sha256
-      - name: Upload native binary and build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: drnas-native-blender-android-arm64-${{ github.run_id }}
-          path: native-results/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Automatically dispatch Native LAB APK after successful PIE build
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ELF_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh api --method POST \
-            "repos/${{ github.repository }}/actions/workflows/native-apk-smoke.yml/dispatches" \
-            -f ref=experiment/native-arm64-apk-smoke \
-            -f "inputs[blender_run_id]=$ELF_RUN_ID"
-          echo "Dispatched Native LAB APK packaging for ELF run $ELF_RUN_ID"
-, edge)
-          if flags_match:
-              flags = flags_match.group(1)
-              flags = re.sub(r'(?<!\\S)-no-pie(?!\\S)|(?<!\\S)-Wl,-no-pie(?!\\S)', '', flags)
-              flags += ' -fPIE -pie -Wl,-pie'
-              edge = edge[:flags_match.start(1)] + flags + edge[flags_match.end(1):]
+          match = re.search(r'(?m)^  LINK_FLAGS = (.*)$', edge)
+          if match:
+              flags = re.sub(r'(?<!\S)(?:-no-pie|-Wl,-no-pie)(?!\S)', '', match.group(1))
+              flags = flags.rstrip() + ' -fPIE -pie'
+              edge = edge[:match.start(1)] + flags + edge[match.end(1):]
           else:
-              first_line = edge.find('\n')
-              assert first_line >= 0
-              edge = edge[:first_line] + '\n  LINK_FLAGS = -fPIE -pie -Wl,-pie' + edge[first_line:]
+              line_end = edge.find('\n')
+              assert line_end >= 0, 'Missing Blender link edge newline'
+              edge = edge[:line_end] + '\n  LINK_FLAGS = -fPIE -pie' + edge[line_end:]
+          assert re.search(r'(?m)^  LINK_FLAGS = .* -pie$', edge), 'Blender linker PIE flag missing'
           content = content[:build_start] + edge + content[edge_end:]
           ninja.write_text(content)
-          print('Final Blender Ninja link flags:', re.search(r'(?m)^  LINK_FLAGS = (.*)
           assert ' -lutil ' not in ninja.read_text()
           print(f'Android linker preflight: removed libutil, {count} Linux version scripts; resolved {len(archives)} staged ARM64 static archives for Blender')
           PY
@@ -532,59 +487,3 @@ jobs:
           path: native-results/
           if-no-files-found: error
           retention-days: 14
-      - name: Automatically dispatch Native LAB APK after successful PIE build
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ELF_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh api --method POST \
-            "repos/${{ github.repository }}/actions/workflows/native-apk-smoke.yml/dispatches" \
-            -f ref=experiment/native-arm64-apk-smoke \
-            -f "inputs[blender_run_id]=$ELF_RUN_ID"
-          echo "Dispatched Native LAB APK packaging for ELF run $ELF_RUN_ID"
-, edge).group(1))
-          assert ' -lutil ' not in ninja.read_text()
-          print(f'Android linker preflight: removed libutil, {count} Linux version scripts; resolved {len(archives)} staged ARM64 static archives for Blender')
-          PY
-      - name: Attempt actual native Blender target compile
-        run: |
-          set -euxo pipefail
-          cmake --build /tmp/blender-android --target blender --parallel 4 \
-            2>&1 | tee native-results/blender-build.log
-          find /tmp/blender-android -type f -name blender -exec file {} \;
-      - name: Verify and collect Android ARM64 Blender binary
-        run: |
-          set -euo pipefail
-          test -s /tmp/blender-android/bin/blender
-          cp /tmp/blender-android/bin/blender native-results/blender
-          file native-results/blender | tee native-results/blender-file.txt
-          readelf -h native-results/blender | tee native-results/blender-elf-header.txt
-          readelf -l native-results/blender | tee native-results/blender-program-headers.txt
-          readelf -d native-results/blender | tee native-results/blender-dynamic.txt
-          grep -q 'Machine:.*AArch64' native-results/blender-elf-header.txt
-          grep -q 'Type:.*DYN' native-results/blender-elf-header.txt
-          grep -q '/system/bin/linker64' native-results/blender-program-headers.txt
-          cd native-results
-          sha256sum blender > blender.sha256
-      - name: Upload native binary and build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: drnas-native-blender-android-arm64-${{ github.run_id }}
-          path: native-results/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Automatically dispatch Native LAB APK after successful PIE build
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ELF_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh api --method POST \
-            "repos/${{ github.repository }}/actions/workflows/native-apk-smoke.yml/dispatches" \
-            -f ref=experiment/native-arm64-apk-smoke \
-            -f "inputs[blender_run_id]=$ELF_RUN_ID"
-          echo "Dispatched Native LAB APK packaging for ELF run $ELF_RUN_ID"

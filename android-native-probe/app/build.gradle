@@ -5,21 +5,36 @@ plugins {
 android {
     namespace 'hr.drnas.nativeprobe'
     compileSdk 35
+    ndkVersion '27.2.12479018'
 
     defaultConfig {
-        applicationId 'hr.drnas.nativeprobe'
+        // Isolated Vulkan GUI experiment: does not replace DRNAS Native LAB
+        // or existing EmuDRNAS installations.
+        applicationId 'hr.drnas.nativevulkan'
         minSdk 26
         targetSdk 35
         versionCode 1
-        versionName '0.1-native-smoke'
+        versionName '0.1-vulkan-window-lab'
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                cFlags '-std=c11 -Wall -Wextra'
+            }
+        }
     }
-
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
     packaging {
         jniLibs {
-            // A native executable is packaged as lib*.so so Android installs
-            // it in an executable, app-owned nativeLibraryDir (no W^X violation).
+            // Standalone Android ELF is kept in executable nativeLibraryDir.
             useLegacyPackaging = true
-            keepDebugSymbols += ['**/libdrnas_smoke.so', '**/libblender.so']
+            keepDebugSymbols += ['**/libblender.so']
         }
     }
 }

@@ -372,6 +372,15 @@ jobs:
           s = s.replace("shm_unlink(name_.c_str())", "unlink((std::string(getenv(\"TMPDIR\") ? getenv(\"TMPDIR\") : \"/data/local/tmp\") + name_).c_str())")
           assert "shm_open(" not in s and "shm_unlink(" not in s
           subprocess_src.write_text(s)
+          # Android's execinfo.h does not declare glibc backtrace helpers.
+          # Keep the Blender backtrace function but select its existing
+          # no-execinfo fallback only for Android.
+          system_src = root / "source/blender/blenlib/intern/system.cc"
+          s = system_src.read_text()
+          old = "#include <climits>"
+          assert s.count(old) == 1
+          s = s.replace(old, "#if defined(__ANDROID__)\\n#  undef HAVE_EXECINFO_H\\n#endif\\n\\n" + old)
+          system_src.write_text(s)
           mmap_src = root / "source/blender/blenlib/intern/BLI_mmap.cc"
           s = mmap_src.read_text()
           old = "struct sigaction newact = {{nullptr}}, oldact = {{nullptr}};"

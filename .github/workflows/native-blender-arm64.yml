@@ -74,6 +74,36 @@ jobs:
           cmake --install /tmp/zstd-build
           test -f /tmp/android-deps/include/zstd.h
           test -f /tmp/android-deps/lib/libzstd.a
+      - name: Cross-compile libepoxy for Android ARM64
+        run: |
+          set -euxo pipefail
+          sudo apt-get install -y --no-install-recommends meson pkg-config python3-mako
+          git clone --depth 1 --branch 1.5.10 https://github.com/anholt/libepoxy.git /tmp/libepoxy-src
+          NDK="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          cat > /tmp/android-arm64-meson.ini <<EOF
+          [binaries]
+          c = '$NDK/aarch64-linux-android26-clang'
+          cpp = '$NDK/aarch64-linux-android26-clang++'
+          ar = '$NDK/llvm-ar'
+          strip = '$NDK/llvm-strip'
+          pkg-config = '/usr/bin/pkg-config'
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'aarch64'
+          endian = 'little'
+          [properties]
+          needs_exe_wrapper = true
+          [built-in options]
+          default_library = 'static'
+          EOF
+          meson setup /tmp/epoxy-build /tmp/libepoxy-src \
+            --cross-file /tmp/android-arm64-meson.ini \
+            --prefix=/tmp/android-deps -Dtests=false -Degl=yes -Dglx=no -Dx11=false
+          meson compile -C /tmp/epoxy-build
+          meson install -C /tmp/epoxy-build
+          test -f /tmp/android-deps/include/epoxy/gl.h
+          test -f /tmp/android-deps/lib/libepoxy.a
       - name: Probe official Blender lite and headless CMake configuration
         run: |
           set -euxo pipefail
@@ -90,6 +120,8 @@ jobs:
             -DPNG_LIBRARY=/tmp/android-deps/lib/libpng16.a \
             -DZSTD_INCLUDE_DIR=/tmp/android-deps/include \
             -DZSTD_LIBRARY=/tmp/android-deps/lib/libzstd.a \
+            -DEpoxy_INCLUDE_DIR=/tmp/android-deps/include \
+            -DEpoxy_LIBRARY=/tmp/android-deps/lib/libepoxy.a \
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             2>&1 | tee native-results/blender-configure.log

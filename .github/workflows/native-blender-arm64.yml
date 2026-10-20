@@ -163,7 +163,16 @@ jobs:
             -Djpeg=ON -Dzlib=ON -Dwebp=OFF -Dzstd=OFF -Dlzma=OFF
           cmake --build /tmp/tiff-build --parallel 4
           cmake --install /tmp/tiff-build
-          test -f /tmp/android-deps/lib/libtiff.a
+          # OpenImageIO 2.5 requests OpenEXR CONFIG; locate the actual staged config.
+          OPENEXR_CONFIG="$(find /tmp/android-deps -type f -name OpenEXRConfig.cmake -print -quit)"
+          IMATH_CONFIG="$(find /tmp/android-deps -type f -name ImathConfig.cmake -print -quit)"
+          test -n "$OPENEXR_CONFIG"
+          test -n "$IMATH_CONFIG"
+          OPENEXR_DIR="$(dirname "$OPENEXR_CONFIG")"
+          IMATH_DIR="$(dirname "$IMATH_CONFIG")"
+          echo "OpenEXR CMake config: $OPENEXR_DIR"
+          echo "Imath CMake config: $IMATH_DIR"
+                    test -f /tmp/android-deps/lib/libtiff.a
       - name: Cross-compile Imath and OpenEXR for OpenImageIO
         run: |
           set -euxo pipefail
@@ -238,7 +247,7 @@ jobs:
             -DUSE_OPENEXR=ON -DUSE_TIFF=ON -DUSE_WEBP=OFF \
             -DUSE_FFMPEG=OFF -DUSE_OPENCV=OFF -DUSE_QT=OFF \
             -DUSE_PUGIXML=OFF -DUSE_LIBRAW=OFF \
-            -DJPEG_ROOT=/tmp/android-deps -DPNG_ROOT=/tmp/android-deps -DTIFF_ROOT=/tmp/android-deps -DTIFF_INCLUDE_DIR=/tmp/android-deps/include -DTIFF_LIBRARY_RELEASE=/tmp/android-deps/lib/libtiff.a -DOpenEXR_ROOT=/tmp/android-deps
+            -DJPEG_ROOT=/tmp/android-deps -DPNG_ROOT=/tmp/android-deps -DTIFF_ROOT=/tmp/android-deps -DTIFF_INCLUDE_DIR=/tmp/android-deps/include -DTIFF_LIBRARY_RELEASE=/tmp/android-deps/lib/libtiff.a -DOpenEXR_ROOT=/tmp/android-deps -DOpenEXR_DIR="$OPENEXR_DIR" -DImath_DIR="$IMATH_DIR"
           cmake --build /tmp/oiio-build --parallel 4
           cmake --install /tmp/oiio-build
           test -f /tmp/android-deps/include/OpenImageIO/imageio.h

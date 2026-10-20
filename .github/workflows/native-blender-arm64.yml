@@ -46,6 +46,20 @@ jobs:
           cmake --install /tmp/jpeg-build
           test -f /tmp/android-deps/include/jpeglib.h
           test -f /tmp/android-deps/lib/libjpeg.a
+      - name: Cross-compile PNG for Android ARM64
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch v1.6.44 https://github.com/pnggroup/libpng.git /tmp/libpng-src
+          cmake -S /tmp/libpng-src -B /tmp/png-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/android-deps \
+            -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF \
+            -DPNG_EXECUTABLES=OFF -DPNG_HARDWARE_OPTIMIZATIONS=OFF
+          cmake --build /tmp/png-build --parallel 4
+          cmake --install /tmp/png-build
+          test -f /tmp/android-deps/include/png.h
+          test -f /tmp/android-deps/lib/libpng16.a
       - name: Probe official Blender lite and headless CMake configuration
         run: |
           set -euxo pipefail
@@ -58,6 +72,8 @@ jobs:
             -DWITH_LIBS_PRECOMPILED=OFF -DWITH_PYTHON=OFF \
             -DJPEG_INCLUDE_DIR=/tmp/android-deps/include \
             -DJPEG_LIBRARY=/tmp/android-deps/lib/libjpeg.a \
+            -DPNG_PNG_INCLUDE_DIR=/tmp/android-deps/include \
+            -DPNG_LIBRARY=/tmp/android-deps/lib/libpng16.a \
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             2>&1 | tee native-results/blender-configure.log

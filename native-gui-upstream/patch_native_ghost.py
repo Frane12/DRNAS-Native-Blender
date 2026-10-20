@@ -110,13 +110,7 @@ c = once(c, """                                                      int32_t(cx 
                                                       int32_t(cy - gesture_prev_y_),""",
          """                                                      sx,
                                                       sy,""")
-c = once(c, """                                                      int32_t(dist - gesture_prev_dist_),
-                                                       0,
-                                                       false));""",
-         """                                                      sz,
-                                                       0,
-                                                       false));""")
-
+c = once(c, "int32_t(dist - gesture_prev_dist_)", "sz")
 c = once(c,
     "void GHOST_SystemAndroid::handleOpenMainFile(const char *path)",
     """void GHOST_SystemAndroid::handleDrnasInput(int32_t action, float x, float y, float value)

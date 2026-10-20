@@ -1,0 +1,141 @@
+name: DRNAS Native Blender Real GUI + Touch Controls APK
+
+on:
+  push:
+    branches: [feature/native-gui-touch-controls-sensitivity]
+    paths: [".github/workflows/native-gui-controls-build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-native-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Check out DRNAS controls and native patches
+        uses: actions/checkout@v4
+
+      - name: Check out exact upstream source (full native Blender)
+        uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          path: upstream
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Validate native source, Java and pinned revision
+        run: |
+          set -euxo pipefail
+          test "$(git -C upstream rev-parse HEAD)" = d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          python3 native-gui-upstream/patch_native_ghost.py upstream
+          python3 native-gui-upstream/create_sdl3_gui_preview.py upstream/build_files/android/apk
+          python3 native-gui-upstream/add_drnas_controls.py upstream/build_files/android/apk
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/build_files/android/apk/app/src/main/AndroidManifest.xml')
+          text = p.read_text().replace('package="org.blender.blender"',
+                                       'package="hr.drnas.nativeblendercontrols"')
+          assert 'package="hr.drnas.nativeblendercontrols"' in text
+          p.write_text(text)
+          PY
+          git -C upstream diff --stat
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Free disk space for Android native prebuilt libraries
+        run: |
+          set -euxo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/25.* \
+            /usr/local/lib/android/sdk/ndk/26.* /usr/local/lib/android/sdk/ndk/27.* \
+            /usr/local/lib/android/sdk/ndk/28.* /usr/local/lib/android/sdk/ndk/29.* \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/powershell \
+            /opt/ghc /usr/local/lib/ghcup || true
+          df -h /
+
+      - name: Install exact upstream Android build toolchain
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            git-lfs ninja-build patchelf zip unzip gcc-14 g++-14
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;30.0.14904198-beta1" "platforms;android-35" \
+            "build-tools;35.0.1" "platform-tools"
+          test -f "$ANDROID_HOME/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
+          ln -s "$ANDROID_HOME" "$HOME/android-sdk"
+          df -h /
+
+      - name: Fetch matching upstream prebuilt Android and host codegen dependencies
+        run: |
+          set -euxo pipefail
+          cd upstream
+          git lfs install --local
+          git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
+          git config --local credential.https://projects.blender.org.helper \
+            '!f() { echo username=; echo password=; }; f'
+          git lfs pull
+          git config submodule.lib/linux_x64.update checkout
+          git -c protocol.file.allow=always submodule update --init --depth 1 --checkout \
+            lib/android_arm64 lib/linux_x64
+          test -d lib/android_arm64
+          test -d lib/linux_x64
+          du -sh lib/android_arm64 lib/linux_x64
+          df -h /
+
+      - name: Supply Vulkan headers compatible with upstream Android GHOST
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 3 --retry-all-errors -o /tmp/vulkan_headers.tar.gz \
+            https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.341.tar.gz
+          mkdir -p blender_build_android/lib/vulkan_headers
+          tar -xzf /tmp/vulkan_headers.tar.gz -C /tmp
+          cp -R /tmp/Vulkan-Headers-1.4.341/include blender_build_android/lib/vulkan_headers/
+          rm -rf /tmp/Vulkan-Headers-1.4.341 /tmp/vulkan_headers.tar.gz
+          mkdir -p upstream/../blender_build_android/lib
+          cp -R blender_build_android/lib/vulkan_headers upstream/../blender_build_android/lib/ || true
+
+      - name: Build full native Android Blender lite with DRNAS patched GHOST
+        env:
+          CC: gcc-14
+          CXX: g++-14
+          ANDROID_HOST_CC: gcc-14
+          ANDROID_HOST_CXX: g++-14
+        run: |
+          set -euxo pipefail
+          cd upstream
+          bash build_files/android/build_apk.sh lite
+          test -s ../blender_build_android/android_apk_stage_lite/blender-lite.apk
+
+      - name: Check APK identity, signature, viewport engine and native entrypoint
+        run: |
+          set -euxo pipefail
+          SRC=blender_build_android/android_apk_stage_lite/blender-lite.apk
+          test -s "$SRC"
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose "$SRC"
+          unzip -Z1 "$SRC" | grep -F 'lib/arm64-v8a/libblender.so'
+          unzip -Z1 "$SRC" | grep -F 'assets/blender_runtime.zip'
+          unzip -p "$SRC" lib/arm64-v8a/libblender.so > /tmp/drnas-full-gui.so
+          readelf -Ws /tmp/drnas-full-gui.so | grep -F 'Java_org_blender_blender_BlenderActivity_nativeOnDrnasInput'
+          mkdir -p native-controls-results
+          cp "$SRC" native-controls-results/DRNAS-Native-Blender-Real-GUI-Controls-LAB.apk
+          (cd native-controls-results && sha256sum *.apk > SHA256SUMS.txt)
+          cp native-gui-upstream/README.md native-controls-results/SOURCE-ATTRIBUTION.txt
+
+      - name: Upload separate real GHOST controls APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Native-Real-GUI-Controls-${{ github.run_id }}
+          path: native-controls-results/
+          if-no-files-found: error
+          retention-days: 7

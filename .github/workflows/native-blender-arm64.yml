@@ -253,6 +253,9 @@ jobs:
           cmake --build /tmp/oiio-build --parallel 4
           cmake --install /tmp/oiio-build
           test -f /tmp/android-deps/include/OpenImageIO/imageio.h
+          test -f /tmp/android-deps/include/OpenImageIO/export.h
+          test -f /tmp/android-deps/lib/libOpenImageIO.a
+          test -f /tmp/android-deps/lib/libOpenImageIO_Util.a
           find /tmp/android-deps/lib -name '*OpenImageIO*' -print
       - name: Probe official Blender lite and headless CMake configuration
         run: |
@@ -277,6 +280,9 @@ jobs:
             -DFREETYPE_LIBRARY_RELEASE=/tmp/android-deps/lib/libfreetype.a \
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=ON \
             -DOPENIMAGEIO_ROOT_DIR=/tmp/android-deps \
+            -DOPENIMAGEIO_INCLUDE_DIR=/tmp/android-deps/include \
+            -DOPENIMAGEIO_LIBRARY=/tmp/android-deps/lib/libOpenImageIO.a \
+            -DOPENIMAGEIO_UTIL_LIBRARY=/tmp/android-deps/lib/libOpenImageIO_Util.a \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             2>&1 | tee native-results/blender-configure.log
       - name: Build Linux host DNA generator and wire cross-build

@@ -1,0 +1,102 @@
+name: DRNAS Native GHOST Input GUI LAB APK
+
+on:
+  push:
+    branches:
+      - feature/native-android-ghost-input-bridge
+    paths:
+      - "android-native-probe/**"
+      - ".github/workflows/native-ghost-input-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify bounded native input bridge on host (ASan/UBSan)
+        run: |
+          set -euxo pipefail
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -pthread \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            android-native-probe/app/src/main/cpp/ghost_input_bridge.c \
+            android-native-probe/tests/test_ghost_input_bridge.c \
+            -o /tmp/drnas-input-bridge-test
+          /tmp/drnas-input-bridge-test
+
+      - name: Setup Android NDK Vulkan and Gradle prerequisites
+        run: |
+          set -euxo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          test -f "$ANDROID_HOME/ndk/27.2.12479018/sysroot/usr/include/vulkan/vulkan.h" || \
+            test -f "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan/vulkan.h"
+
+      - name: Download previously validated Blender ARM64 PIE (no Blender rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: drnas-native-blender-android-arm64-39487417634
+          run-id: 39487417634
+          github-token: ${{ github.token }}
+          path: /tmp/blender-native
+
+      - name: Verify and stage headless LTS Blender alongside native Vulkan test
+        run: |
+          set -euxo pipefail
+          ELF=/tmp/blender-native/blender
+          test -s "$ELF"
+          readelf -h "$ELF" | grep -E 'Class:.*ELF64'
+          readelf -h "$ELF" | grep -E 'Machine:.*AArch64'
+          readelf -h "$ELF" | grep -E 'Type:.*DYN'
+          readelf -l "$ELF" | grep -F '/system/bin/linker64'
+          LIB_DIR=android-native-probe/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$LIB_DIR"
+          cp "$ELF" "$LIB_DIR/libblender.so"
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
+            --strip-debug "$LIB_DIR/libblender.so"
+          readelf -h "$LIB_DIR/libblender.so" | grep -E 'Type:.*DYN'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile Vulkan surface and native input bridge into debug APK
+        run: |
+          set -euxo pipefail
+          cd android-native-probe
+          gradle --no-daemon --stacktrace :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libdrnas_vulkan.so'
+          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libblender.so'
+          mkdir -p ../gui-vulkan-results
+          cp "$APK" ../gui-vulkan-results/DRNAS-Native-GHOST-Input-GUI-LAB-debug.apk
+          (
+            cd ../gui-vulkan-results
+            sha256sum DRNAS-Native-GHOST-Input-GUI-LAB-debug.apk > DRNAS-Native-GHOST-Input-GUI-LAB-debug.apk.sha256
+          )
+          cat > ../gui-vulkan-results/README.txt <<'EOF'
+          DRNAS NATIVE GHOST INPUT GUI BRIDGE LAB - EXPERIMENTAL
+          App id: hr.drnas.nativeghost
+          Contains Android ARM64 Vulkan swapchain renderer, bounded native input queue, and Blender headless LTS ELF.
+          This is a Vulkan draw + JNI->C input bridge smoke test, NOT Blender desktop GUI yet.
+          Test Vulkan button and LTS button and copy/paste logs.
+          Different app ID: does NOT replace native Vulkan LAB, native Blender LAB, or EmuDRNAS.
+          EOF
+
+      - name: Upload isolated Vulkan GUI LAB APK and checksum
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Native-GHOST-Input-GUI-LAB-${{ github.run_id }}
+          path: gui-vulkan-results/
+          if-no-files-found: warn
+          retention-days: 14

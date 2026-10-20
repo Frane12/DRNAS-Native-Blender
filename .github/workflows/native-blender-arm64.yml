@@ -387,6 +387,13 @@ jobs:
           old = "struct sigaction newact = {{nullptr}}, oldact = {{nullptr}};"
           assert s.count(old) == 1
           mmap_src.write_text(s.replace(old, "struct sigaction newact = {}, oldact = {};"))
+          # Android API 26 has clock_gettime, but timespec_get requires API 29.
+          # Reuse Blender's POSIX realtime clock path without raising minSdk.
+          uuid_src = root / "source/blender/blenlib/intern/uuid.cc"
+          s = uuid_src.read_text()
+          old = "#ifdef __APPLE__"
+          assert s.count(old) == 1
+          uuid_src.write_text(s.replace(old, "#if defined(__APPLE__) || defined(__ANDROID__)"))
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile

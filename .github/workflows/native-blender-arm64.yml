@@ -178,7 +178,13 @@ jobs:
           s = p.read_text()
           # Linux-only libutil is unavailable in Android bionic.
           assert ' -lutil ' in s, 'Expected Linux libutil linker flag missing'
-          p.write_text(s.replace(' -lutil ', ' '))
+          import re
+          s = s.replace(' -lutil ', ' ')
+          # Blender's Linux ELF version script exports glibc-only symbols;
+          # Android Bionic does not define these symbols.
+          s, n = re.subn(r" -Wl,--version-script='[^']+'", '', s)
+          assert n > 0, 'Expected Linux version-script flag missing'
+          p.write_text(s)
           PY
       - name: Attempt actual native Blender target compile
         run: |

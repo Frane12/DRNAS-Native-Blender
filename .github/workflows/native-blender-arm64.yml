@@ -279,6 +279,9 @@ jobs:
             -C /tmp/blender-src/build_files/cmake/config/blender_headless.cmake \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_C_FLAGS=-fPIE -DCMAKE_CXX_FLAGS=-fPIE \
+            -DCMAKE_EXE_LINKER_FLAGS=-pie \
             -DWITH_LIBS_PRECOMPILED=OFF -DWITH_PYTHON=OFF \
             -DJPEG_INCLUDE_DIR=/tmp/android-deps/include \
             -DJPEG_LIBRARY=/tmp/android-deps/lib/libjpeg.a \
@@ -454,6 +457,7 @@ jobs:
           readelf -l native-results/blender | tee native-results/blender-program-headers.txt
           readelf -d native-results/blender | tee native-results/blender-dynamic.txt
           grep -q 'Machine:.*AArch64' native-results/blender-elf-header.txt
+          grep -q 'Type:.*DYN' native-results/blender-elf-header.txt
           grep -q '/system/bin/linker64' native-results/blender-program-headers.txt
           cd native-results
           sha256sum blender > blender.sha256

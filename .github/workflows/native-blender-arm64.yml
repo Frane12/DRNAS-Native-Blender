@@ -189,25 +189,48 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth 1 --branch v2.5.16.0 https://github.com/AcademySoftwareFoundation/OpenImageIO.git /tmp/oiio-src
-          # CMake 3.31 removed FindBoost; OIIO 2.5 requires classic FindBoost variables.
-          # Restore the CMake 3.30 module and give it explicit Android Boost paths.
-          curl -fsSL https://raw.githubusercontent.com/Kitware/CMake/v3.30.9/Modules/FindBoost.cmake -o /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
-          test -s /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
-          # The copied module uses CMAKE_CURRENT_LIST_DIR for CMake's own helper.
-          # Point that include at the installed CMake module directory instead.
-          sed -i 's|${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake|${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake|g' /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
-          grep -q 'CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake' /tmp/oiio-src/src/cmake/modules/FindBoost.cmake
+          # OIIO 2.5 uses Boost CONFIG with CMake >= 3.30.
+          # b2 provides the Android archives but not BoostConfig.cmake: bridge them explicitly.
           test -f /tmp/android-deps/include/boost/version.hpp
           test -f /tmp/android-deps/lib/libboost_thread.a
           test -f /tmp/android-deps/lib/libboost_filesystem.a
-                    # OIIO 2.5 forces Boost CONFIG on CMake >=3.30, but b2 installs classic libraries.
-          # Permit FindBoost module lookup with the explicitly staged Android Boost archives.
-          sed -i 's/if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.30")/if (FALSE)/' /tmp/oiio-src/src/cmake/externalpackages.cmake
+          mkdir -p /tmp/android-deps/lib/cmake/Boost-1.86.0
+          cat > /tmp/android-deps/lib/cmake/Boost-1.86.0/BoostConfig.cmake <<'BOOST_CONFIG'
+          set(Boost_FOUND TRUE)
+          set(Boost_VERSION 1.86.0)
+          set(Boost_VERSION_STRING 1.86.0)
+          set(Boost_INCLUDE_DIRS "/tmp/android-deps/include")
+          set(Boost_LIBRARY_DIRS "/tmp/android-deps/lib")
+          set(Boost_LIBRARIES Boost::thread Boost::filesystem)
+          foreach(component IN ITEMS thread filesystem)
+            if(NOT TARGET Boost::${component})
+              add_library(Boost::${component} STATIC IMPORTED)
+              set_target_properties(Boost::${component} PROPERTIES
+                IMPORTED_LOCATION "/tmp/android-deps/lib/libboost_${component}.a"
+                INTERFACE_INCLUDE_DIRECTORIES "/tmp/android-deps/include")
+            endif()
+            set(Boost_${component}_FOUND TRUE)
+          endforeach()
+          if(NOT TARGET Boost::boost)
+            add_library(Boost::boost INTERFACE IMPORTED)
+            set_target_properties(Boost::boost PROPERTIES
+              INTERFACE_INCLUDE_DIRECTORIES "/tmp/android-deps/include")
+          endif()
+          BOOST_CONFIG
+          cat > /tmp/android-deps/lib/cmake/Boost-1.86.0/BoostConfigVersion.cmake <<'BOOST_VERSION'
+          set(PACKAGE_VERSION "1.86.0")
+          if(PACKAGE_FIND_VERSION VERSION_LESS_EQUAL PACKAGE_VERSION)
+            set(PACKAGE_VERSION_COMPATIBLE TRUE)
+          endif()
+          if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+            set(PACKAGE_VERSION_EXACT TRUE)
+          endif()
+          BOOST_VERSION
           cmake -S /tmp/oiio-src -B /tmp/oiio-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
-            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBoost_ROOT=/tmp/android-deps -DBoost_NO_BOOST_CMAKE=ON -DBoost_USE_STATIC_LIBS=ON -DBOOST_INCLUDEDIR=/tmp/android-deps/include -DBOOST_LIBRARYDIR=/tmp/android-deps/lib -DCMAKE_POLICY_DEFAULT_CMP0167=OLD -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBoost_ROOT=/tmp/android-deps -DBoost_DIR=/tmp/android-deps/lib/cmake/Boost-1.86.0 -DBoost_USE_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF \
             -DOIIO_BUILD_TOOLS=OFF -DOIIO_BUILD_TESTS=OFF -DOIIO_BUILD_DOCS=OFF \
             -DOIIO_BUILD_PYTHON=OFF -DUSE_PYTHON=OFF \
             -DUSE_OPENEXR=ON -DUSE_TIFF=ON -DUSE_WEBP=OFF \

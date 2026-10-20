@@ -362,6 +362,16 @@ jobs:
           old = "UNUSED_VARS(is_label, has_valid_context, has_valid_context_error);"
           assert s.count(old) == 1
           tooltip.write_text(s.replace(old, "UNUSED_VARS(has_valid_context, has_valid_context_error);"))
+          # Android Bionic has no POSIX shm_open/shm_unlink API.
+          # Use named files in the app-private temporary directory for the
+          # existing file-descriptor-backed mmap mechanism. Keep O_EXCL and
+          # unlink semantics, and do not silently disable subprocess support.
+          subprocess_src = root / "source/blender/blenlib/intern/BLI_subprocess.cc"
+          s = subprocess_src.read_text()
+          s = s.replace("shm_open(name.c_str(),", "open((std::string(getenv(\"TMPDIR\") ? getenv(\"TMPDIR\") : \"/data/local/tmp\") + name).c_str(),")
+          s = s.replace("shm_unlink(name_.c_str())", "unlink((std::string(getenv(\"TMPDIR\") ? getenv(\"TMPDIR\") : \"/data/local/tmp\") + name_).c_str())")
+          assert "shm_open(" not in s and "shm_unlink(" not in s
+          subprocess_src.write_text(s)
           mmap_src = root / "source/blender/blenlib/intern/BLI_mmap.cc"
           s = mmap_src.read_text()
           old = "struct sigaction newact = {{nullptr}}, oldact = {{nullptr}};"

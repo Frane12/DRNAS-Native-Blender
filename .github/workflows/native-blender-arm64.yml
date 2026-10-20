@@ -150,10 +150,48 @@ jobs:
           test -f /tmp/android-deps/include/boost/version.hpp
           test -f /tmp/android-deps/lib/libboost_filesystem.a
           test -f /tmp/android-deps/lib/libboost_thread.a
+      - name: Cross-compile TIFF for OpenImageIO
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch v4.6.0 https://github.com/libsdl-org/libtiff.git /tmp/tiff-src
+          cmake -S /tmp/tiff-src -B /tmp/tiff-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBUILD_SHARED_LIBS=OFF \
+            -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-docs=OFF \
+            -Djpeg=ON -Dzlib=ON -Dwebp=OFF -Dzstd=OFF -Dlzma=OFF
+          cmake --build /tmp/tiff-build --parallel 4
+          cmake --install /tmp/tiff-build
+          test -f /tmp/android-deps/lib/libtiff.a
+      - name: Cross-compile Imath and OpenEXR for OpenImageIO
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch v3.2.4 https://github.com/AcademySoftwareFoundation/Imath.git /tmp/imath-src
+          cmake -S /tmp/imath-src -B /tmp/imath-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF
+          cmake --build /tmp/imath-build --parallel 4
+          cmake --install /tmp/imath-build
+          git clone --depth 1 --branch v3.2.4 https://github.com/AcademySoftwareFoundation/openexr.git /tmp/openexr-src
+          cmake -S /tmp/openexr-src -B /tmp/openexr-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBUILD_SHARED_LIBS=OFF \
+            -DOPENEXR_BUILD_TOOLS=OFF -DOPENEXR_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
+          cmake --build /tmp/openexr-build --parallel 4
+          cmake --install /tmp/openexr-build
+          test -f /tmp/android-deps/include/OpenEXR/ImfRgbaFile.h
       - name: Cross-compile required OpenImageIO for Android ARM64
         run: |
           set -euxo pipefail
           git clone --depth 1 --branch v2.5.16.0 https://github.com/AcademySoftwareFoundation/OpenImageIO.git /tmp/oiio-src
+          # OIIO 2.5 forces Boost CONFIG on CMake >=3.30, but b2 installs classic libraries.
+          # Permit FindBoost module lookup with the explicitly staged Android Boost archives.
+          sed -i 's/if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.30")/if (FALSE)/' /tmp/oiio-src/src/cmake/externalpackages.cmake
           cmake -S /tmp/oiio-src -B /tmp/oiio-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
@@ -161,10 +199,10 @@ jobs:
             -DCMAKE_PREFIX_PATH=/tmp/android-deps -DBoost_ROOT=/tmp/android-deps -DBoost_NO_BOOST_CMAKE=ON -DCMAKE_POLICY_DEFAULT_CMP0167=OLD -DBUILD_SHARED_LIBS=OFF \
             -DOIIO_BUILD_TOOLS=OFF -DOIIO_BUILD_TESTS=OFF -DOIIO_BUILD_DOCS=OFF \
             -DOIIO_BUILD_PYTHON=OFF -DUSE_PYTHON=OFF \
-            -DUSE_OPENEXR=OFF -DUSE_TIFF=OFF -DUSE_WEBP=OFF \
+            -DUSE_OPENEXR=ON -DUSE_TIFF=ON -DUSE_WEBP=OFF \
             -DUSE_FFMPEG=OFF -DUSE_OPENCV=OFF -DUSE_QT=OFF \
             -DUSE_PUGIXML=OFF -DUSE_LIBRAW=OFF \
-            -DJPEG_ROOT=/tmp/android-deps -DPNG_ROOT=/tmp/android-deps
+            -DJPEG_ROOT=/tmp/android-deps -DPNG_ROOT=/tmp/android-deps -DTIFF_ROOT=/tmp/android-deps -DOpenEXR_ROOT=/tmp/android-deps
           cmake --build /tmp/oiio-build --parallel 4
           cmake --install /tmp/oiio-build
           test -f /tmp/android-deps/include/OpenImageIO/imageio.h

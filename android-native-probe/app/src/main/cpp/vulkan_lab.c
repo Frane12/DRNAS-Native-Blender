@@ -1,6 +1,8 @@
 #define VK_USE_PLATFORM_ANDROID_KHR
 #include <vulkan/vulkan.h>
 #include <android/native_window_jni.h>
+#include "ghost_input_bridge.h"
+#include <time.h>
 #include <jni.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -10,19 +12,19 @@
 
 /*
  * Phase 1 graphics validation: actual Android Vulkan surface, swapchain,
- * single clear-and-present frame. This is NOT Blender GPU/GHOST rendering.
+ * single clear-and-present frame. Input is queued for a future Android GHOST backend.
+ * This is NOT Blender GPU/GHOST rendering.
  * The native input bridge captures actions; GHOST integration is phase 2.
  */
-static atomic_int event_counter = 0;
-static atomic_int last_action = 0;
-
 JNIEXPORT void JNICALL
 Java_hr_drnas_nativeprobe_MainActivity_nativeInput(
     JNIEnv *env, jobject activity, jint action, jfloat x, jfloat y, jfloat value)
 {
-    (void)env; (void)activity; (void)x; (void)y; (void)value;
-    atomic_store(&last_action, action);
-    atomic_fetch_add(&event_counter, 1);
+    (void)env; (void)activity;
+    struct timespec now = {0};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    uint64_t ns = ((uint64_t) now.tv_sec * 1000000000ULL) + (uint64_t) now.tv_nsec;
+    drnas_input_enqueue(action, x, y, value, ns);
 }
 
 static int supports_extension(const VkExtensionProperties *list,
@@ -342,10 +344,13 @@ Java_hr_drnas_nativeprobe_MainActivity_nativeVulkanDraw(
     };
     VK_TRY("vkQueuePresentKHR", vkQueuePresentKHR(queue, &pi));
     VK_TRY("vkQueueWaitIdle", vkQueueWaitIdle(queue));
+    DrnasInputStats input_stats;
+    drnas_input_get_stats(&input_stats);
     snprintf(msg, sizeof(msg),
-             "VULKAN PASS: real Android frame presented. GPU: %s | API %u.%u | surface %ux%u | queue %u | UI/GHOST not connected | touch events %d",
+             "VULKAN PASS: real Android frame presented. GPU: %s | API %u.%u | surface %ux%u | queue %u | native input FIFO %llu events (%u pending) | Blender GHOST not connected",
              props.deviceName, VK_VERSION_MAJOR(vk_version), VK_VERSION_MINOR(vk_version),
-             extent.width, extent.height, family, atomic_load(&event_counter));
+             extent.width, extent.height, family, (unsigned long long) input_stats.received,
+             input_stats.pending);
     goto cleanup;
 
 oom:

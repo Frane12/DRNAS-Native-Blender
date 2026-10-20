@@ -143,6 +143,31 @@ jobs:
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             2>&1 | tee native-results/blender-configure.log
+      - name: Build Linux host DNA generator and wire cross-build
+        run: |
+          set -euxo pipefail
+          # Cross-compiling Blender requires build-machine generators.
+          # Build the host executable from the same pinned Blender source.
+          sudo apt-get install -y --no-install-recommends libfreetype-dev libjpeg-dev libpng-dev libzstd-dev libepoxy-dev
+          cmake -S /tmp/blender-src -B /tmp/blender-host -G Ninja \
+            -C /tmp/blender-src/build_files/cmake/config/blender_lite.cmake \
+            -C /tmp/blender-src/build_files/cmake/config/blender_headless.cmake \
+            -DWITH_LIBS_PRECOMPILED=OFF -DWITH_PYTHON=OFF \
+            -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
+            -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF
+          cmake --build /tmp/blender-host --target makesdna datatoc --parallel 4
+          file /tmp/blender-host/bin/makesdna /tmp/blender-host/bin/datatoc
+          # Use native host tools only for generated-source custom commands.
+          python3 - <<'PY'
+          from pathlib import Path
+          for tool in ("makesdna", "datatoc"):
+              for p in Path("/tmp/blender-src").rglob("CMakeLists.txt"):
+                  data = p.read_text()
+                  old = f'"$<TARGET_FILE:{tool}>"'
+                  if old in data:
+                      p.write_text(data.replace(old, f'"/tmp/blender-host/bin/{tool}"'))
+          PY
+          cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile
         run: |
           set -euxo pipefail

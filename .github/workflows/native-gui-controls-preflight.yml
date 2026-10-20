@@ -2,7 +2,7 @@ name: DRNAS Native GUI Controls Source Preflight
 
 on:
   push:
-    branches: [feature/native-gui-touch-controls-sensitivity]
+    branches: [feature/native-gui-shortcuts-ui-size-wheel]
     paths:
       - "native-gui-upstream/**"
       - ".github/workflows/native-gui-controls-preflight.yml"
@@ -37,7 +37,21 @@ jobs:
           python3 native-gui-upstream/patch_native_ghost.py upstream
           python3 native-gui-upstream/create_sdl3_gui_preview.py upstream/build_files/android/apk
           python3 native-gui-upstream/add_drnas_controls.py upstream/build_files/android/apk
+          python3 native-gui-upstream/patch_shortcut_ui_native.py upstream
+          python3 native-gui-upstream/add_shortcuts_ui_scaling.py upstream
           grep -Fq 'void GHOST_SystemAndroid::dispatchDrnasInput' upstream/intern/ghost/intern/GHOST_SystemAndroid.cc
           grep -Fq 'nativeOnDrnasInput(7' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
           grep -Fq 'nativeOnDrnasInput(' upstream/intern/ghost/intern/GHOST_AndroidMain.cc
-          echo 'DRNAS Android GHOST source patch preflight PASS'
+          grep -Fq 'DRNAS_ANDROID_UI_DPI' upstream/intern/ghost/intern/GHOST_AndroidMemoryTier.hh
+          grep -Fq 'KEYCODE_F12' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+          echo 'DRNAS Android shortcut/UI-size GHOST source preflight PASS'
+      - name: Compile modified Android Java without a full Blender build
+        run: |
+          set -euxo pipefail
+          ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+          if [ ! -f "$ANDROID_JAR" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35"
+          fi
+          mkdir -p /tmp/drnas-preflight-java
+          javac --release 17 -classpath "$ANDROID_JAR" -d /tmp/drnas-preflight-java \
+            upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java

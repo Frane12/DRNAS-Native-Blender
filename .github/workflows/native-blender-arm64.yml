@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: write
 jobs:
   android-arm64:
     runs-on: ubuntu-24.04
@@ -469,3 +470,15 @@ jobs:
           path: native-results/
           if-no-files-found: error
           retention-days: 14
+      - name: Automatically dispatch Native LAB APK after successful PIE build
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ELF_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/${{ github.repository }}/actions/workflows/native-apk-smoke.yml/dispatches" \
+            -f ref=experiment/native-arm64-apk-smoke \
+            -f "inputs[blender_run_id]=$ELF_RUN_ID"
+          echo "Dispatched Native LAB APK packaging for ELF run $ELF_RUN_ID"

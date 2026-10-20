@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(drnas_native_vulkan C)
 set(CMAKE_C_STANDARD 11)
-add_library(drnas_vulkan SHARED vulkan_lab.c)
+add_library(drnas_vulkan SHARED vulkan_lab.c ghost_input_bridge.c)
 find_library(ANDROID_LIB android REQUIRED)
 find_library(VULKAN_LIB vulkan REQUIRED)
 find_library(LOG_LIB log REQUIRED)

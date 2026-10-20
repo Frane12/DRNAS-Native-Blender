@@ -310,8 +310,8 @@ jobs:
             -DWITH_LIBS_PRECOMPILED=OFF -DWITH_PYTHON=OFF \
             -DWITH_CYCLES=OFF -DWITH_OPENIMAGEIO=OFF \
             -DWITH_VULKAN_BACKEND=OFF -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF
-          cmake --build /tmp/blender-host --target makesdna datatoc --parallel 4
-          file /tmp/blender-host/bin/makesdna /tmp/blender-host/bin/datatoc
+          cmake --build /tmp/blender-host --target makesdna datatoc glsl_preprocess --parallel 4
+          file /tmp/blender-host/bin/makesdna /tmp/blender-host/bin/datatoc /tmp/blender-host/bin/glsl_preprocess
           # Imported host executables satisfy target dependencies without
           # trying to link Android versions of the build-time generators.
           python3 - <<'PY'
@@ -332,6 +332,12 @@ jobs:
           assert old in s
           toc.write_text(s.replace(old, '''add_executable(datatoc IMPORTED GLOBAL)
           set_target_properties(datatoc PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/datatoc")'''))
+          glsl = root / "source/blender/gpu/glsl_preprocess/CMakeLists.txt"
+          s = glsl.read_text()
+          old = "add_executable(glsl_preprocess ${SRC})\noptimize_debug_target(glsl_preprocess)"
+          assert old in s
+          glsl.write_text(s.replace(old, '''add_executable(glsl_preprocess IMPORTED GLOBAL)
+          set_target_properties(glsl_preprocess PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/glsl_preprocess")'''))
           PY
           cmake -S /tmp/blender-src -B /tmp/blender-android
       - name: Attempt actual native Blender target compile

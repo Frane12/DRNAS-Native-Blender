@@ -1,0 +1,38 @@
+name: DRNAS Native Blender ARM64 feasibility
+on:
+  push:
+    paths: [".github/workflows/native-blender-arm64.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Android NDK and build tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build cmake
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018"
+      - name: Compile and verify native Android ARM64 ELF
+        run: |
+          set -euxo pipefail
+          mkdir -p native-results
+          printf '#include <stdio.h>\nint main(void){puts("DRNAS Android ARM64");return 0;}\n' > native-results/smoke.c
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -fPIE -pie native-results/smoke.c -o native-results/smoke
+          file native-results/smoke
+          readelf -h native-results/smoke | tee native-results/header.txt
+          grep -q 'Machine:.*AArch64' native-results/header.txt
+      - name: Fetch official Blender source (no Git LFS assets)
+        run: |
+          set -euxo pipefail
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src
+          git -C /tmp/blender-src rev-parse HEAD
+      - name: Report next native port requirements
+        run: |
+          echo "Android ARM64 smoke binary verified. Blender source checked out."
+          echo "This is NOT a Blender binary or APK. Next: cross-compile Blender dependencies and actual headless Blender."

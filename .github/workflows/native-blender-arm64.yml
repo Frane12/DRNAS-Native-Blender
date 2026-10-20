@@ -138,7 +138,7 @@ jobs:
         run: |
           set -euxo pipefail
           git clone --depth 1 --branch boost-1.86.0 https://github.com/boostorg/boost.git /tmp/boost-src
-          git -C /tmp/boost-src submodule update --init --depth 1 tools/build libs/config libs/core libs/assert libs/static_assert libs/type_traits libs/mpl libs/preprocessor libs/throw_exception libs/smart_ptr libs/integer libs/move libs/utility libs/iterator libs/functional libs/bind libs/concept_check libs/array libs/container_hash libs/describe libs/detail libs/io libs/optional libs/variant libs/system libs/filesystem libs/thread libs/atomic libs/chrono libs/date_time libs/algorithm libs/range libs/serialization libs/regex
+          git -C /tmp/boost-src submodule update --init --depth 1 tools/boost_install tools/build libs/config libs/core libs/assert libs/static_assert libs/type_traits libs/mpl libs/preprocessor libs/throw_exception libs/smart_ptr libs/integer libs/move libs/utility libs/iterator libs/functional libs/bind libs/concept_check libs/array libs/container_hash libs/describe libs/detail libs/io libs/optional libs/variant libs/system libs/filesystem libs/thread libs/atomic libs/chrono libs/date_time libs/algorithm libs/range libs/serialization libs/regex
           cd /tmp/boost-src
           ./bootstrap.sh --with-libraries=filesystem,thread
           NDK_CLANG="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"

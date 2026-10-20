@@ -429,7 +429,7 @@ jobs:
           build_start = content.find('build bin/blender:')
           assert build_start >= 0, 'Cannot find final Blender Ninja build edge'
           link_start = content.find('  LINK_LIBRARIES = ', build_start)
-          link_end = content.find('\\n', link_start)
+          link_end = content.find('\n', link_start)
           assert link_start >= 0 and link_end > link_start, 'Cannot locate Blender link library list'
           assert link_start - build_start < 16000, 'Unexpected Blender Ninja build edge'
           group = ' -Wl,--start-group ' + ' '.join(str(p) for p in archives) + ' -Wl,--end-group'

@@ -1,0 +1,109 @@
+name: DRNAS Native ARM64 APK smoke test
+
+on:
+  push:
+    branches:
+      - experiment/native-arm64-apk-smoke
+    paths:
+      - "android-native-probe/**"
+      - ".github/workflows/native-apk-smoke.yml"
+  workflow_dispatch:
+    inputs:
+      blender_run_id:
+        description: "Optional successful native ELF workflow run ID (omit for standalone smoke test)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Android SDK and NDK
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+
+      - name: Cross-compile native executable smoke probe
+        run: |
+          set -euxo pipefail
+          mkdir -p android-native-probe/app/src/main/jniLibs/arm64-v8a
+          CC="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$CC" -O2 -fPIE -pie -Wl,--build-id=sha1             android-native-probe/native/smoke.c             -o android-native-probe/app/src/main/jniLibs/arm64-v8a/libdrnas_smoke.so
+          file android-native-probe/app/src/main/jniLibs/arm64-v8a/libdrnas_smoke.so
+          readelf -h android-native-probe/app/src/main/jniLibs/arm64-v8a/libdrnas_smoke.so | grep -E 'Type:.*DYN'
+          readelf -h android-native-probe/app/src/main/jniLibs/arm64-v8a/libdrnas_smoke.so | grep -E 'Machine:.*AArch64'
+          readelf -l android-native-probe/app/src/main/jniLibs/arm64-v8a/libdrnas_smoke.so | grep -F '/system/bin/linker64'
+
+      - name: Download optional native Blender ELF build artifact
+        if: ${{ inputs.blender_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: drnas-native-blender-android-arm64-${{ inputs.blender_run_id }}
+          run-id: ${{ inputs.blender_run_id }}
+          github-token: ${{ github.token }}
+          path: /tmp/drnas-elf-artifact
+
+      - name: Validate optional Blender ELF and bundle into test APK
+        if: ${{ inputs.blender_run_id != '' }}
+        run: |
+          set -euxo pipefail
+          ELF=/tmp/drnas-elf-artifact/blender
+          test -s "$ELF"
+          # Android app executables must be AArch64, PIE and Bionic-linked.
+          readelf -h "$ELF" | grep -E 'Machine:.*AArch64'
+          readelf -h "$ELF" | grep -E 'Type:.*DYN'
+          readelf -l "$ELF" | grep -F '/system/bin/linker64'
+          cp "$ELF" android-native-probe/app/src/main/jniLibs/arm64-v8a/libblender.so
+          chmod 644 android-native-probe/app/src/main/jniLibs/arm64-v8a/libblender.so
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug-signed standalone DRNAS Native LAB APK
+        run: |
+          set -euxo pipefail
+          cd android-native-probe
+          gradle --no-daemon --stacktrace :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          unzip -l "$APK" | grep -F lib/arm64-v8a/libdrnas_smoke.so
+          if [ -n "${{ inputs.blender_run_id }}" ]; then
+            unzip -l "$APK" | grep -F lib/arm64-v8a/libblender.so
+          fi
+          mkdir -p ../native-apk-results
+          cp "$APK" ../native-apk-results/DRNAS-Native-ARM64-LAB-debug.apk
+          (
+            cd ../native-apk-results
+            sha256sum DRNAS-Native-ARM64-LAB-debug.apk > DRNAS-Native-ARM64-LAB-debug.apk.sha256
+          )
+          cat > ../native-apk-results/README.txt <<'EOF'
+          DRNAS Native ARM64 LAB - ISOLATED DEBUG APK
+          Package: hr.drnas.nativeprobe (does not replace EmuDRNAS).
+          Use button POKRENI NATIVNI TEST, then KOPIRAJ LOG.
+          The base APK tests execution of a real Android AArch64 PIE probe.
+          Blender ELF is included only if the workflow was dispatched with a
+          successful native Blender workflow run ID.
+          This test APK does NOT provide a Blender GUI.
+          Debug signatures can differ across GitHub runners: uninstall an older
+          LAB build before installing a newer debug APK if signatures disagree.
+          EOF
+
+      - name: Upload separate APK and checksum
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Native-ARM64-LAB-APK-${{ github.run_id }}
+          path: native-apk-results/
+          if-no-files-found: warn
+          retention-days: 14

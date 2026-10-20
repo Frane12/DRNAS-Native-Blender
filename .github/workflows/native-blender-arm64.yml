@@ -133,6 +133,18 @@ jobs:
           cmake --install /tmp/freetype-build
           test -f /tmp/android-deps/lib/libfreetype.a
           test -f /tmp/android-deps/include/freetype2/ft2build.h
+      - name: Disable OpenImageIO discovery in headless feasibility probe
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/blender-src/build_files/cmake/platform/platform_unix.cmake')
+          s = p.read_text()
+          needle = 'find_package_wrapper(OpenImageIO)'
+          assert s.count(needle) == 1, 'Unexpected Blender OpenImageIO discovery layout'
+          s = s.replace(needle, 'if(WITH_OPENIMAGEIO)\\n    find_package_wrapper(OpenImageIO)\\n  endif()'.replace('\\n', '\n'))
+          p.write_text(s)
+          PY
       - name: Probe official Blender lite and headless CMake configuration
         run: |
           set -euxo pipefail

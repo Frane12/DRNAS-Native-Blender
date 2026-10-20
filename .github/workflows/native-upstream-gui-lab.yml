@@ -1,0 +1,122 @@
+name: DRNAS Real Native Blender Viewport GUI LAB
+
+on:
+  push:
+    branches: [feature/sdl3-real-blender-viewport-lab]
+    paths:
+      - "native-gui-upstream/**"
+      - ".github/workflows/native-upstream-gui-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gui-native-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out DRNAS packaging and overlay sources
+        uses: actions/checkout@v4
+
+      - name: Check out pinned upstream GPL Android GUI Java and Gradle sources
+        uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          path: upstream
+          sparse-checkout: |
+            build_files/android/apk
+          sparse-checkout-cone-mode: true
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Verify exact upstream revision (fail closed)
+        run: |
+          set -euxo pipefail
+          test "$(git -C upstream rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
+          test -s upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+
+      - name: Fetch and verify upstream compiled native Android Blender lite APK
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 25 --max-time 600 \
+            -o /tmp/upstream-blender-lite.apk \
+            "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-lite.apk"
+          echo "5d05835e52377c7d987145b6c35a944804c88e32e114fd53ede4c36edea20ce1  /tmp/upstream-blender-lite.apk" | sha256sum -c -
+          test "$(stat -c %s /tmp/upstream-blender-lite.apk)" -eq 203199511
+
+      - name: Stage native libraries and Blender runtime (no headless ELF used)
+        run: |
+          set -euxo pipefail
+          stage="$PWD/upstream/build_files/android/apk/ci-stage"
+          mkdir -p "$stage"
+          unzip -q /tmp/upstream-blender-lite.apk 'lib/arm64-v8a/*' -d "$stage"
+          unzip -q /tmp/upstream-blender-lite.apk 'assets/*' -d "$stage"
+          test -s "$stage/lib/arm64-v8a/libblender.so"
+          test -s "$stage/assets/blender_runtime.zip"
+          echo "Staged $(find "$stage/lib/arm64-v8a" -type f | wc -l) native libraries"
+
+      - name: Patch only the matching Java Activity for DRNAS toolbar
+        run: |
+          set -euxo pipefail
+          python3 native-gui-upstream/create_sdl3_gui_preview.py upstream/build_files/android/apk
+          grep -Fq "applicationId 'hr.drnas.nativeblendergui'" upstream/build_files/android/apk/app/build.gradle
+          grep -Fq "nativeOnKey(androidKey, KeyEvent.ACTION_DOWN, 0)" upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK tools
+        run: |
+          set -euxo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build and verify separate DRNAS native Blender GUI APK
+        run: |
+          set -euxo pipefail
+          cd upstream/build_files/android/apk
+          gradle --no-daemon --stacktrace :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          unzip -Z1 "$APK" | grep -F 'lib/arm64-v8a/libblender.so'
+          unzip -Z1 "$APK" | grep -F 'assets/blender_runtime.zip'
+          mkdir -p "$GITHUB_WORKSPACE/native-gui-results"
+          cp "$APK" "$GITHUB_WORKSPACE/native-gui-results/DRNAS-Real-Native-Blender-GUI-Upstream-LAB-debug.apk"
+          cd "$GITHUB_WORKSPACE/native-gui-results"
+          sha256sum *.apk > SHA256SUMS.txt
+          cat > README.txt <<'EOF'
+          DRNAS Real Native Blender GUI UPSTREAM ADOPTION LAB - EXPERIMENTAL
+          Android application ID: hr.drnas.nativeblendergui
+          This is NOT the previously compiled DRNAS Blender 4.5.4 headless ELF.
+          Actual Vulkan Blender 5.3 native GUI binary supplied by:
+            https://github.com/simfeo/blender/tree/android-alpha-4
+            commit d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          Repackaged by DRNAS from the verified upstream blender-lite.apk,
+          with source-matching Java activity and DRNAS shortcut overlay.
+          Source and GPL attribution: native-gui-upstream/README.md in DRNAS repo.
+          This APK is not affiliated with or published by the Blender Foundation.
+          Still needs on-device testing; DO NOT claim guaranteed compatibility.
+          Does not replace EmuDRNAS, native Vulkan LAB or stock Blender.
+          EOF
+
+      - name: Upload preview GUI APK with origin metadata
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Real-Native-GUI-Upstream-LAB-${{ github.run_id }}
+          path: native-gui-results/
+          if-no-files-found: error
+          retention-days: 7

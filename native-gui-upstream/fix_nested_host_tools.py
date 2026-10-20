@@ -22,6 +22,7 @@ patch = """  # DRNAS Android cross-build: this subproject runs on a Linux CI run
     "-DWITH_HEADLESS=ON"
     "-DWITH_GHOST_ANDROID=OFF"
     "-DWITH_GHOST_X11=OFF"
+    "-DWITH_X11=OFF"
     "-DWITH_GHOST_WAYLAND=OFF"
     "-DWITH_GHOST_SDL=OFF"
     "-DWITH_X11_XINPUT=OFF"

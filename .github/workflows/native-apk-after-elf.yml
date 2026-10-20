@@ -1,0 +1,101 @@
+name: DRNAS Native LAB APK after successful ELF
+
+# This watcher lives on the default branch (GitHub workflow_run requirement).
+# It never rebuilds Blender: it consumes the completed ARM64 workflow artifact.
+on:
+  workflow_run:
+    workflows: ["DRNAS Native Blender ARM64 feasibility"]
+    types: [completed]
+    branches: ["fix/android-freetype-brotli"]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  package-android-lab:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'fix/android-freetype-brotli' &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out isolated Android LAB application
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/native-arm64-apk-smoke
+          persist-credentials: false
+
+      - name: Download the *successful* ARM64 Blender ELF artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: drnas-native-blender-android-arm64-${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: /tmp/drnas-elf-artifact
+
+      - name: Prepare Android toolchain
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+
+      - name: Validate Android PIE ELF and prepare native ARM64 app executables
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euxo pipefail
+          ELF=/tmp/drnas-elf-artifact/blender
+          test -s "$ELF"
+          readelf -h "$ELF" | grep -Eq 'Class:.*ELF64'
+          readelf -h "$ELF" | grep -Eq 'Machine:.*AArch64'
+          readelf -h "$ELF" | grep -Eq 'Type:.*DYN'
+          readelf -l "$ELF" | grep -Fq '/system/bin/linker64'
+          NDK_BIN="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          LIB_DIR=android-native-probe/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$LIB_DIR"
+          "$NDK_BIN/aarch64-linux-android26-clang" -O2 -fPIE -pie -Wl,--build-id=sha1 \
+            android-native-probe/native/smoke.c -o "$LIB_DIR/libdrnas_smoke.so"
+          readelf -h "$LIB_DIR/libdrnas_smoke.so" | grep -Eq 'Type:.*DYN'
+          readelf -l "$LIB_DIR/libdrnas_smoke.so" | grep -Fq '/system/bin/linker64'
+          # Keep the complete ELF in the upstream build artifact. Remove
+          # debug info only in the APK copy to reduce Android install size.
+          cp "$ELF" "$LIB_DIR/libblender.so"
+          "$NDK_BIN/llvm-strip" --strip-debug "$LIB_DIR/libblender.so"
+          readelf -h "$LIB_DIR/libblender.so" | grep -Eq 'Type:.*DYN'
+          readelf -h "$LIB_DIR/libblender.so" | grep -Eq 'Machine:.*AArch64'
+          readelf -l "$LIB_DIR/libblender.so" | grep -Fq '/system/bin/linker64'
+          echo "Validated and packaged Android AArch64 PIE from workflow run $SOURCE_RUN_ID."
+          ls -lh "$LIB_DIR/libblender.so" "$LIB_DIR/libdrnas_smoke.so"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build separately installable DRNAS Native LAB APK
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euxo pipefail
+          cd android-native-probe
+          gradle --no-daemon :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          unzip -l "$APK" | grep -F lib/arm64-v8a/libblender.so
+          unzip -l "$APK" | grep -F lib/arm64-v8a/libdrnas_smoke.so
+          mkdir -p ../native-apk-results
+          cp "$APK" ../native-apk-results/DRNAS-Native-Blender-ARM64-LAB-debug.apk
+          cd ../native-apk-results
+          sha256sum DRNAS-Native-Blender-ARM64-LAB-debug.apk > DRNAS-Native-Blender-ARM64-LAB-debug.apk.sha256
+          printf 'DRNAS Native Blender LAB (headless runtime test, not GUI)\nSource ELF run: %s\nPackage: hr.drnas.nativeprobe\nNever overwrites EmuDRNAS.\n' "$SOURCE_RUN_ID" > README.txt
+
+      - name: Upload APK artifact and SHA256
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Native-Blender-ARM64-LAB-${{ github.event.workflow_run.id }}
+          path: native-apk-results/
+          if-no-files-found: error
+          retention-days: 14

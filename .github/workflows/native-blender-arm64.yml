@@ -328,7 +328,7 @@ jobs:
           dna.write_text(s)
           toc = root / "source/blender/datatoc/CMakeLists.txt"
           s = toc.read_text()
-          old = "add_executable(datatoc ${SRC})\\noptimize_debug_target(datatoc)"
+          old = "add_executable(datatoc ${SRC})\noptimize_debug_target(datatoc)"
           assert old in s
           toc.write_text(s.replace(old, '''add_executable(datatoc IMPORTED GLOBAL)
           set_target_properties(datatoc PROPERTIES IMPORTED_LOCATION "/tmp/blender-host/bin/datatoc")'''))

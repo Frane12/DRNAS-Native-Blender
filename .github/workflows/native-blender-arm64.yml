@@ -410,9 +410,33 @@ jobs:
           content = content.replace(' -lutil ', ' ')
           content, count = re.subn(r" -Wl,--version-script='[^']+'", '', content)
           assert count > 0, 'Missing expected Linux ELF version-script flag (check Blender CMake)'
+          # The final Blender link uses OIIO and FreeType as STATIC archives.
+          # Their transitive static dependencies are not propagated by the
+          # upstream Linux-centric find module. Preserve all dependencies and
+          # resolve circular references with an lld archive group, only for
+          # the final executable (not every Android target).
+          staged = Path('/tmp/android-deps/lib')
+          archives = sorted(staged.glob('*.a'))
+          required = ('libOpenImageIO.a', 'libOpenImageIO_Util.a',
+                      'libboost_filesystem.a', 'libtiff.a')
+          for name in required:
+              assert (staged / name).is_file(), f'Missing Android static dependency: {name}'
+          assert any(p.name.startswith('libImath') for p in archives), 'Missing Android Imath static archive'
+          assert any(p.name.startswith('libOpenEXR') for p in archives), 'Missing Android OpenEXR static archives'
+          # All archives in this staging prefix were built using the NDK.
+          # Do not include any host /usr/lib binaries in Android link.
+          assert archives, 'Empty Android dependency staging directory'
+          build_start = content.find('build bin/blender:')
+          assert build_start >= 0, 'Cannot find final Blender Ninja build edge'
+          link_start = content.find('  LINK_LIBRARIES = ', build_start)
+          link_end = content.find('\\n', link_start)
+          assert link_start >= 0 and link_end > link_start, 'Cannot locate Blender link library list'
+          assert link_start - build_start < 16000, 'Unexpected Blender Ninja build edge'
+          group = ' -Wl,--start-group ' + ' '.join(str(p) for p in archives) + ' -Wl,--end-group'
+          content = content[:link_end] + group + content[link_end:]
           ninja.write_text(content)
           assert ' -lutil ' not in ninja.read_text()
-          print(f'Android linker preflight: removed libutil and {count} Linux version scripts')
+          print(f'Android linker preflight: removed libutil, {count} Linux version scripts; resolved {len(archives)} staged ARM64 static archives for Blender')
           PY
       - name: Attempt actual native Blender target compile
         run: |

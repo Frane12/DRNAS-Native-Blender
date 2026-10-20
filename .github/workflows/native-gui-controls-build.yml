@@ -69,9 +69,9 @@ jobs:
             git-lfs ninja-build patchelf zip unzip gcc-14 g++-14
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "ndk;30.0.14904198-beta1" "platforms;android-35" \
+            "ndk;30.0.16248370" "platforms;android-35" \
             "build-tools;35.0.1" "platform-tools"
-          test -f "$ANDROID_HOME/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
+          test -f "$ANDROID_HOME/ndk/30.0.16248370/build/cmake/android.toolchain.cmake"
           ln -s "$ANDROID_HOME" "$HOME/android-sdk"
           df -h /
 
@@ -110,6 +110,7 @@ jobs:
           CXX: g++-14
           ANDROID_HOST_CC: gcc-14
           ANDROID_HOST_CXX: g++-14
+          ANDROID_NDK_VERSION: '30.0.16248370'
         run: |
           set -euxo pipefail
           cd upstream

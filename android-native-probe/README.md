@@ -1,29 +1,48 @@
-# DRNAS Native ARM64 LAB (isolated)
+# DRNAS Android native Vulkan / GUI LAB
 
-This app is **not** the graphical Blender application. It is a separate Android
-smoke-test APK that can be installed on a phone without a PC or Termux.
+Experimental branch `feature/native-android-vulkan-gui`. Built to run alongside
+the original `DRNAS Native LAB` and EmuDRNAS (different application ID).
 
-- The first test runs an actual NDK-built ARM64 PIE executable directly from
-  Android's app-owned `nativeLibraryDir` (it must be installed as `lib*.so`).
-- If a real Android ARM64 Blender executable is included, the second test runs
-  `blender --version` with a 20-second timeout and shows stdout / errors.
-- Use the **Copy log** button to share text. It has no network permission.
-- It is a *debug-signed*, separately named LAB app; it does not overwrite
-  DRNAS Emu or the production Blender APK.
-- Do not package Linux x86_64 Blender binaries. An Android ELF must be
-  AArch64, linked for Android/Bionic and be PIE (ET_DYN).
+## What this actually does
 
-## CI
+1. Starts a Java `SurfaceView` backed by a real Android `ANativeWindow`.
+2. Creates a Vulkan instance with `VK_KHR_android_surface` and a presentation
+   queue on the device's actual Vulkan driver (Adreno, Mali, Xclipse, etc.).
+3. Creates a Vulkan swapchain, records a real render pass, clears a frame
+   dark teal and presents it to the phone. Result includes the GPU name and
+   supported Vulkan API version or a specific error.
+4. Displays **experimental DRNAS controls**: LMB and RMB touch press/release
+   buttons, relative zoom slider, movable buttons/zoom (EDIT mode), immersive
+   fullscreen toggle and COPY log. Native input events are captured as a
+   test ABI for the future GHOST adapter.
+5. Checks the separately packaged headless Android ARM64 Blender ELF with
+   `--version` through the LTS button.
 
-`.github/workflows/native-apk-smoke.yml` builds a basic test APK on its
-branch. An optional `blender_run_id` workflow dispatch input can attach an
-existing successful `DRNAS Native Blender ARM64 feasibility` artifact
-from the same repository. This is rejected if the ELF is not a PIE AArch64
-Android executable. A working binary/GUI is **not** implied by a successful
-APK compile.
+**THIS IS NOT YET BLENDER'S VIEWPORT.** The pictured Vulkan frame is the
+small native Vulkan proof of rendering. The Blender ELF built in the headless
+workflow has `WITH_VULKAN_BACKEND=OFF`. It cannot magically accept this
+window via `--gpu-backend vulkan`. We must develop an Android-specific GHOST
+window/event backend and rebuild Blender with Vulkan before a genuine
+graphical Blender interface can be displayed.
 
-## Known limitations
+## Next engineering steps
 
-The existing Blender compilation workflow is headless (Vulkan disabled);
-the APK only tests native program launch, not Blender UI. A completed
-headless ELF still requires device-level dependency and runtime validation.
+- Validate `VkResult`, driver version and surface presentation on Adreno,
+  Mali and Xclipse phones (including app suspend/resume).
+- Wire Android touch, button/key/wheel events into an Android GHOST bridge,
+  testing event order, surface recreation and input focus.
+- Enable Blender Vulkan backend, adapt GHOST Android window/system and
+  Vulkan `VkSurfaceKHR` handoff; patch Bionic/platform paths as needed.
+- Draw Blender UI via GPU backend (not Android-native UI substitutes), then
+  reuse DRNAS overlay ergonomics with customizable controls.
+- Keep existing EmuDRNAS and proven headless ELF builds untouched until
+  graphical port passes real device tests.
+
+## Build
+
+`.github/workflows/native-vulkan-gui-lab.yml` creates a debug-signed APK and
+checks Android ABI, package contents and checksum. It downloads the successful
+native ELF from run 39487417634, verifies ELF64/AArch64/PIE/Android interpreter,
+and strips debug symbols only from the APK copy. There is **no rerun of Blender's
+~3200 native C/C++ compilation**. No release is published. The resulting APK
+is specifically named **Vulkan GUI LAB**.

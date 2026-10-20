@@ -1,0 +1,189 @@
+name: DRNAS Native LITE FastBuild (sccache)
+
+# Manual only: preserve the existing long-build workflow and avoid overlapping compiles.
+# First FastBuild warms the sccache cache; subsequent matching builds can reuse C/C++ objects.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: drnas-native-lite-fastbuild
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  full-native-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      # CMake consumes these when configuring host tools and Android targets.
+      # The compiler/toolchain and flags are part of sccache's cache key.
+      SCCACHE_GHA_ENABLED: "true"
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+    steps:
+      - name: Check out DRNAS controls and native patches
+        uses: actions/checkout@v4
+        with:
+          # Workflow is registered on main, but sources stay on the tested GUI branch.
+          ref: feature/native-gui-shortcuts-ui-size-wheel
+
+      - name: Check out exact upstream source (full native Blender)
+        uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          path: upstream
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Validate native source, Java and pinned revision
+        run: |
+          set -euxo pipefail
+          test "$(git -C upstream rev-parse HEAD)" = d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          python3 native-gui-upstream/patch_native_ghost.py upstream
+          python3 native-gui-upstream/create_sdl3_gui_preview.py upstream/build_files/android/apk
+          python3 native-gui-upstream/add_drnas_controls.py upstream/build_files/android/apk
+          python3 native-gui-upstream/patch_shortcut_ui_native.py upstream
+          python3 native-gui-upstream/add_shortcuts_ui_scaling.py upstream
+          python3 native-gui-upstream/patch_adreno810_resolution.py upstream
+          python3 native-gui-upstream/fix_nested_host_tools.py upstream
+          python3 native-gui-upstream/add_drnas_splash.py upstream
+          python3 native-gui-upstream/add_adreno810_autoprofile.py upstream
+          python3 native-gui-upstream/set_pre_alpha_app_identity.py upstream
+          grep -Fq 'DWITH_HEADLESS=ON' upstream/build_files/cmake/host_tools.cmake
+          grep -Fq 'DrnasSplashActivity' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
+          grep -Fq 'DRNAS_ANDROID_UI_DPI' upstream/intern/ghost/intern/GHOST_AndroidMemoryTier.hh
+          grep -Fq 'drnasButtonSizes' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+          grep -Fq 'DRNAS_A810_RENDER_LIMIT' upstream/intern/ghost/intern/GHOST_AndroidMemoryTier.hh
+          grep -Fq 'DrnasGpuProfile.apply(this)' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+          grep -Fq 'Blender Native Android Pre-Alpha 2026' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/build_files/android/apk/app/src/main/AndroidManifest.xml')
+          text = p.read_text().replace('package="org.blender.blender"',
+                                       'package="hr.drnas.blendernativeprealpha2026"')
+          assert 'package="hr.drnas.blendernativeprealpha2026"' in text
+          p.write_text(text)
+          PY
+          git -C upstream diff --stat
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Enable persistent GitHub Actions C/C++ compilation cache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.16.0"
+
+      - name: Verify sccache launcher is available
+        run: |
+          set -euo pipefail
+          command -v sccache
+          sccache --version
+          sccache --zero-stats || true
+
+      - name: Free disk space for Android native prebuilt libraries
+        run: |
+          set -euxo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/25.* \
+            /usr/local/lib/android/sdk/ndk/26.* /usr/local/lib/android/sdk/ndk/27.* \
+            /usr/local/lib/android/sdk/ndk/28.* /usr/local/lib/android/sdk/ndk/29.* \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/powershell \
+            /opt/ghc /usr/local/lib/ghcup || true
+          df -h /
+
+      - name: Install exact upstream Android build toolchain
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            git-lfs ninja-build patchelf zip unzip gcc-14 g++-14
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;30.0.16248370" "platforms;android-35" \
+            "build-tools;35.0.1" "platform-tools"
+          test -f "$ANDROID_HOME/ndk/30.0.16248370/build/cmake/android.toolchain.cmake"
+          ln -s "$ANDROID_HOME" "$HOME/android-sdk"
+          df -h /
+
+      - name: Fetch matching upstream prebuilt Android and host codegen dependencies
+        run: |
+          set -euxo pipefail
+          cd upstream
+          git lfs install --local
+          git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
+          git config --local credential.https://projects.blender.org.helper \
+            '!f() { echo username=; echo password=; }; f'
+          git lfs pull
+          git config submodule.lib/linux_x64.update checkout
+          git -c protocol.file.allow=always submodule update --init --depth 1 --checkout \
+            lib/android_arm64 lib/linux_x64
+          test -d lib/android_arm64
+          test -d lib/linux_x64
+          du -sh lib/android_arm64 lib/linux_x64
+          df -h /
+
+      - name: Supply Vulkan headers compatible with upstream Android GHOST
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 3 --retry-all-errors -o /tmp/vulkan_headers.tar.gz \
+            https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.341.tar.gz
+          mkdir -p blender_build_android/lib/vulkan_headers
+          tar -xzf /tmp/vulkan_headers.tar.gz -C /tmp
+          cp -R /tmp/Vulkan-Headers-1.4.341/include blender_build_android/lib/vulkan_headers/
+          rm -rf /tmp/Vulkan-Headers-1.4.341 /tmp/vulkan_headers.tar.gz
+          mkdir -p upstream/../blender_build_android/lib
+          cp -R blender_build_android/lib/vulkan_headers upstream/../blender_build_android/lib/ || true
+
+      - name: Build native Android Blender LITE with cached C/C++ objects
+        env:
+          CC: gcc-14
+          CXX: g++-14
+          ANDROID_HOST_CC: gcc-14
+          ANDROID_HOST_CXX: g++-14
+          ANDROID_NDK_VERSION: '30.0.16248370'
+        run: |
+          set -euxo pipefail
+          cd upstream
+          bash build_files/android/build_apk.sh lite
+          test -s ../blender_build_android/android_apk_stage_lite/blender-lite.apk
+
+      - name: Check APK identity, signature, viewport engine and native entrypoint
+        run: |
+          set -euxo pipefail
+          SRC=blender_build_android/android_apk_stage_lite/blender-lite.apk
+          test -s "$SRC"
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose "$SRC"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$SRC" | grep -F 'hr.drnas.blendernativeprealpha2026'
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$SRC" | grep -F 'Blender Native Android Pre-Alpha 2026'
+          unzip -Z1 "$SRC" | grep -F 'lib/arm64-v8a/libblender.so'
+          unzip -Z1 "$SRC" | grep -F 'assets/blender_runtime.zip'
+          unzip -p "$SRC" lib/arm64-v8a/libblender.so > /tmp/drnas-full-gui.so
+          readelf -Ws /tmp/drnas-full-gui.so | grep -F 'Java_org_blender_blender_BlenderActivity_nativeOnDrnasInput'
+          mkdir -p native-controls-results
+          cp "$SRC" native-controls-results/Blender-Native-Android-Pre-Alpha-2026.apk
+          (cd native-controls-results && sha256sum *.apk > SHA256SUMS.txt)
+          cp native-gui-upstream/README.md native-controls-results/SOURCE-ATTRIBUTION.txt
+
+      - name: Show compilation cache hit/miss statistics
+        if: always()
+        run: |
+          if command -v sccache >/dev/null 2>&1; then
+            sccache --show-stats || true
+          fi
+
+      - name: Upload separate native pre-alpha APK with DRNAS controls
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blender-Native-Android-Pre-Alpha-2026-FAST-${{ github.run_id }}
+          path: native-controls-results/
+          if-no-files-found: error
+          retention-days: 7

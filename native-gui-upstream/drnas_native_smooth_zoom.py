@@ -47,13 +47,16 @@ def _tick():
         dt = min(0.1, max(0.001, now - _last_time)) if _last_time else 1/60
         _last_time = now
         delta = 0.0
+        stop = False
         try:
             with open(_path, encoding='utf-8') as f:
-                session, sequence, total = f.read(256).split()
+                parts = f.read(256).split()
+            session, sequence, total = parts[:3]
             sequence, total = int(sequence), float(total)
             if session == _session and sequence != _sequence and math.isfinite(total):
                 delta = max(-40.0, min(40.0, total - _total))
                 _sequence, _total = sequence, total
+                stop = len(parts) > 3 and parts[3] == 'STOP'
         except (OSError, ValueError):
             pass
         area, region = _viewport()
@@ -67,6 +70,8 @@ def _tick():
         if identity != _region or _target is None or (_last_applied is not None
                 and abs(math.log(current / max(1e-6, _last_applied))) > 0.002):
             _region, _target = identity, current
+        if stop:
+            _target, delta = current, 0.0
         if delta:
             _target = max(1e-6, min(1e12, _target * math.exp(-delta * 0.11)))
         moving = abs(math.log(current / _target)) > 0.0001

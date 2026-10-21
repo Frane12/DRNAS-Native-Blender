@@ -32,6 +32,9 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
             assert name in dex, f"Missing EMU control option: {name!r}"
     if '--smooth-runtime' in sys.argv:
         assert b'drnasOfferZoom' in dex and b'shortcut_expanded' in dex
+    if '--spring' in sys.argv:
+        for name in (b'DrnasZoomSpring', b'drnasMouseRoot', b'drnasStopSpringZoom', b'Zatvori postavke'):
+            assert name in dex, f'Missing spring/multitouch/settings feature: {name!r}'
     with tempfile.NamedTemporaryFile(suffix=".so") as lib:
         lib.write(output.read("lib/arm64-v8a/libblender.so"))
         lib.flush()

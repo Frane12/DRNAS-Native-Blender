@@ -85,6 +85,17 @@ class SmoothZoomTests(unittest.TestCase):
         for _ in range(4): distance = self.zoom.ease_distance(distance, 5, 1/60)
         self.assertAlmostEqual(distance, self.zoom.ease_distance(10, 5, 1/15))
 
+    def test_spring_release_stops_in_flight_easing_immediately(self):
+        self.signal(1, 8)
+        self.step()
+        stopped_distance = self.region.view_distance
+        Path(self.path).write_text('session 2 8 STOP')
+        for _ in range(20): self.step()
+        self.assertEqual(self.region.view_distance, stopped_distance)
+        Path(self.path).write_text('session 3 9 RUN')
+        self.step()
+        self.assertLess(self.region.view_distance, stopped_distance)
+
 
 if __name__ == '__main__':
     unittest.main()

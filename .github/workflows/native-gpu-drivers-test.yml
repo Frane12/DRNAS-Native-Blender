@@ -1,0 +1,182 @@
+name: Native GPU v7 TEST - EMU drivers and aspect resolutions
+
+on:
+  push:
+    branches: [feature/native-gpu-drivers-resolution]
+    paths: ['.github/workflows/native-gpu-drivers-test.yml', 'native-gui-upstream/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: native-gpu-v7-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.gpu-ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_MAXSIZE: 3G
+  CCACHE_COMPRESS: 'true'
+  CCACHE_COMPILERCHECK: content
+  ANDROID_NDK_VERSION: '30.0.16248370'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          path: upstream
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Apply native GPU changes and every accepted v6 control
+        run: |
+          set -euo pipefail
+          bash native-gui-upstream/apply_gpu_test_patches.sh upstream
+          python3 native-gui-upstream/test_gpu_native.py upstream
+          python3 native-gui-upstream/test_smooth_zoom.py
+          python3 native-gui-upstream/test_save_exit.py
+          mkdir -p gpu-tests
+          javac -d gpu-tests native-gui-upstream/DrnasGpuPolicy.java native-gui-upstream/DrnasGpuPolicyTest.java
+          java -cp gpu-tests org.blender.blender.DrnasGpuPolicyTest
+          javac -d gpu-tests native-gui-upstream/DrnasZoomSpring.java native-gui-upstream/DrnasZoomSpringTest.java native-gui-upstream/DrnasInputHold.java native-gui-upstream/DrnasInputHoldTest.java
+          java -cp gpu-tests DrnasZoomSpringTest
+          java -cp gpu-tests DrnasInputHoldTest
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
+          javac --release 17 -classpath "$ANDROID_HOME/platforms/android-35/android.jar" -d gpu-tests upstream/build_files/android/apk/app/src/main/java/org/blender/blender/*.java
+      - name: Free runner space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /opt/ghc /usr/local/lib/ghcup
+          df -h /
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .gpu-ccache
+          key: native-gpu-v7-ndk30-lite-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: native-gpu-v7-ndk30-lite-ccache-
+      - name: Restore pinned dependency and driver downloads
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            upstream/lib/android_arm64
+            upstream/lib/linux_x64
+            .gpu-driver-cache
+          key: native-gpu-deps-d93bd33-ndk30-${{ hashFiles('native-gui-upstream/gpu_drivers.json') }}
+      - name: Install matching toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends git-lfs ninja-build patchelf zip unzip gcc-14 g++-14 ccache
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;30.0.16248370' 'platforms;android-35' 'build-tools;35.0.1'
+          ln -s "$ANDROID_HOME" "$HOME/android-sdk"
+          ccache --zero-stats
+      - name: Fetch exact native dependencies
+        run: |
+          set -euo pipefail
+          cd upstream
+          git lfs install --local
+          git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
+          git config --local credential.https://projects.blender.org.helper '!f() { echo username=; echo password=; }; f'
+          git lfs pull
+          if test "${{ steps.deps-cache.outputs.cache-hit }}" = true; then
+            rm -f lib/android_arm64/.git lib/linux_x64/.git
+          fi
+          git config submodule.lib/linux_x64.update checkout
+          # A restored directory contains payload only; retain checkout's own git metadata.
+          for dep in lib/android_arm64 lib/linux_x64; do
+            if test -d "$dep" && test -n "$(ls -A "$dep" 2>/dev/null)" && ! test -e "$dep/.git"; then
+              echo "Using cached pinned payload: $dep"
+            else
+              git -c protocol.file.allow=always submodule update --init --depth 1 --checkout "$dep"
+            fi
+          done
+          test -d lib/android_arm64
+          test -d lib/linux_x64
+          df -h /
+      - name: Bundle exact seven Turnip and three PanVK releases from EMU
+        id: gpu-pack
+        run: |
+          set -euo pipefail
+          python3 native-gui-upstream/package_gpu_drivers.py .gpu-driver-cache gpu-preflight/lib gpu-preflight/assets
+      - name: Build pinned ICD loader only - reuse existing GPU drivers
+        run: |
+          set -euo pipefail
+          git clone https://github.com/bylaws/libadrenotools.git adrenotools
+          git -C adrenotools checkout 8fae8ce254dfc1344527e05301e43f37dea2df80
+          git -C adrenotools submodule update --init --recursive
+          cmake -S adrenotools -B adrenotools/build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/30.0.16248370/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-31 -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          ninja -j2 -C adrenotools/build
+      - name: Supply matching Vulkan headers
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-all-errors -o /tmp/vulkan_headers.tar.gz https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.341.tar.gz
+          tar -xzf /tmp/vulkan_headers.tar.gz -C /tmp
+          mkdir -p blender_build_android/lib/vulkan_headers
+          cp -R /tmp/Vulkan-Headers-1.4.341/include blender_build_android/lib/vulkan_headers/
+      - name: Compile native Blender with selectable GPU ICD and aspect-fit resolution
+        env:
+          CC: gcc-14
+          CXX: g++-14
+          ANDROID_HOST_CC: gcc-14
+          ANDROID_HOST_CXX: g++-14
+          BLENDER_ANDROID_TURNIP: '1'
+          BLENDER_ANDROID_ADRENOTOOLS: ${{ github.workspace }}/adrenotools
+          BLENDER_ANDROID_TURNIP_DRIVER: ${{ github.workspace }}/.gpu-driver-cache/libvulkan_turnip.so
+          DRNAS_PATCH_ROOT: ${{ github.workspace }}/native-gui-upstream
+          DRNAS_GPU_CACHE: ${{ github.workspace }}/.gpu-driver-cache
+        run: |
+          set -euo pipefail
+          cd upstream
+          bash build_files/android/build_apk.sh lite
+      - name: Verify signed APK and complete GPU/control payload
+        run: |
+          set -euo pipefail
+          SRC=blender_build_android/android_apk_stage_lite/blender-lite.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose "$SRC"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$SRC" | grep -F 'hr.drnas.blendernativegputest2026v7'
+          python3 native-gui-upstream/verify_gpu_apk.py "$SRC"
+          mkdir -p native-gpu-results
+          cp "$SRC" native-gpu-results/Native-Blender-GPU-v7-TEST-arm64.apk
+          cp gpu-preflight/assets/drnas_gpu_drivers.json native-gpu-results/GPU-DRIVER-MANIFEST.json
+          cp native-gui-upstream/GPU_TEST_NOTES.md native-gpu-results/README.md
+          cp native-gui-upstream/README.md native-gpu-results/SOURCE-ATTRIBUTION.txt
+          (cd native-gpu-results && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Blender-GPU-v7-TEST-${{ github.run_id }}
+          path: native-gpu-results/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Cache statistics
+        if: always()
+        run: command -v ccache >/dev/null && ccache --show-stats || true
+      - name: Save compiler progress even when build fails
+        if: always() && steps.compiler-cache.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .gpu-ccache
+          key: native-gpu-v7-ndk30-lite-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save pinned dependencies and drivers
+        if: always() && steps.gpu-pack.outcome == 'success' && steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            upstream/lib/android_arm64
+            upstream/lib/linux_x64
+            .gpu-driver-cache
+          key: native-gpu-deps-d93bd33-ndk30-${{ hashFiles('native-gui-upstream/gpu_drivers.json') }}

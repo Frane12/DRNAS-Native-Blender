@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "sourceRepository": "Frane12/EmuExperimental",
+  "sourceCommit": "9de8de285352f4c3f771343b3241bb2d1d4d9ef3",
+  "drivers": [
+    {
+      "id": "a6xx_a7xx_r6",
+      "label": "Mesa Turnip R6 \u00b7 A6xx/A7xx",
+      "target": "A6XX_A7XX",
+      "kind": "turnip",
+      "url": "https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/download/v37/Turnip_v26.3.0-R6.zip",
+      "sha256": "5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81",
+      "archive": "Turnip-A6xx-A7xx-R6.zip",
+      "library": "libdrnas_gpu_a6xx_a7xx_r6.so",
+      "minApi": 31
+    },
+    {
+      "id": "a810_ultimate",
+      "label": "DRNAS S Ultimate \u00b7 A810",
+      "target": "A810",
+      "kind": "turnip",
+      "url": "https://github.com/Frane12/Testturnip/releases/download/drnas-turnip-a810-s-ultimate-v1.0/Drnas-Turnip-A810-S-Ultimate-v1.0.zip",
+      "sha256": "b32c541e76556f06f8ec36e7cafe5034cefe2ae8c3d4f38939d2832a963bc8c0",
+      "archive": "Drnas-Turnip-A810.zip",
+      "library": "libdrnas_gpu_a810_ultimate.so",
+      "minApi": 31
+    },
+    {
+      "id": "a830_smart",
+      "label": "DRNAS S1 Smart \u00b7 A830",
+      "target": "A830",
+      "kind": "turnip",
+      "url": "https://github.com/Frane12/Testturnip/releases/download/drnas-turnip-s1-a830-smart/Drnas-Turnip-S1-A830.zip",
+      "sha256": "c5660b57f39b4334d64811b51f496d19327de975f1368b7f936941c00eb577d5",
+      "archive": "Drnas-Turnip-A830.zip",
+      "library": "libdrnas_gpu_a830_smart.so",
+      "minApi": 31
+    },
+    {
+      "id": "a840_h29",
+      "label": "NeuroFlow H2.9 \u00b7 A840 \u00b7 eksperimentalno",
+      "target": "A840",
+      "kind": "turnip",
+      "url": "https://github.com/Frane12/Testturnip/releases/download/drnas-turnip-neuroflow-a840-h2.9-testing-20261017/Drnas-Turnip-NeuroFlow-A840-H2.9-TESTING-ONLY.zip",
+      "sha256": "6b67ba723b2a4881214591055c637e2e513363c44874559d16e2a13b1019bb3d",
+      "archive": "Drnas-Turnip-A840.zip",
+      "library": "libdrnas_gpu_a840_h29.so",
+      "minApi": 31
+    },
+    {
+      "id": "a810_h27",
+      "label": "NeuroFlow H2.7 \u00b7 A810 \u00b7 eksperimentalno",
+      "target": "A810",
+      "kind": "turnip",
+      "url": "https://github.com/Frane12/Testturnip/releases/download/drnas-turnip-neuroflow-a8xx-testing-20261016/Drnas-Turnip-NeuroFlow-A810-H2.7-TESTING-ONLY.zip",
+      "sha256": "90f047876870c70b986e01ed4784fbafb183ad805dcccabdd6cd695502f1d82d",
+      "archive": "Drnas-Turnip-A810-H2.7.zip",
+      "library": "libdrnas_gpu_a810_h27.so",
+      "minApi": 31
+    },
+    {
+      "id": "a830_h24",
+      "label": "NeuroFlow H2.4 \u00b7 A830 \u00b7 eksperimentalno",
+      "target": "A830",
+      "kind": "turnip",
+      "url": "https://github.com/Frane12/Testturnip/releases/download/drnas-turnip-neuroflow-a8xx-testing-20261016/Drnas-Turnip-NeuroFlow-A830-H2.4-TESTING-ONLY.zip",
+      "sha256": "36676a9588d41eb1e8fb016e54c0ec07611a8a3369fd13782bc456c8e6b0f79c",
+      "archive": "Drnas-Turnip-A830-H2.4.zip",
+      "library": "libdrnas_gpu_a830_h24.so",
+      "minApi": 31
+    },
+    {
+      "id": "a840_h28",
+      "label": "NeuroFlow H2.8 \u00b7 A840 \u00b7 eksperimentalno",
+      "target": "A840",
+      "kind": "turnip",
+      "url": "https://github.com/Frane12/Testturnip/releases/download/drnas-turnip-neuroflow-a8xx-testing-20261016/Drnas-Turnip-NeuroFlow-A840-H2.8-TESTING-ONLY.zip",
+      "sha256": "033039c5c9843ced2f119387bdc0b21af3fa359f97d8fabaa3189dbc411510bc",
+      "archive": "Drnas-Turnip-A840-H2.8.zip",
+      "library": "libdrnas_gpu_a840_h28.so",
+      "minApi": 31
+    },
+    {
+      "id": "panvk_r4",
+      "label": "PANVK R4 \u00b7 eksperimentalno",
+      "target": "MALI_G52_G72_G76",
+      "kind": "panvk",
+      "archive": "mali-panvk-26.3.0-devel-r4.zip",
+      "sha256": "1bf5fdbc6fa7134100f747692436eeee5e112e640a8b5064345facbfac918787",
+      "url": "https://github.com/JimVulkan/mali-panvk/releases/download/v1.3.0/mali-panvk-26.3.0-devel-r4.zip",
+      "library": "libdrnas_gpu_panvk_r4.so",
+      "minApi": 31
+    },
+    {
+      "id": "panvk_r3",
+      "label": "PANVK R3 \u00b7 eksperimentalno",
+      "target": "MALI_G52_G72_G76",
+      "kind": "panvk",
+      "archive": "mali-panvk-26.3.0-devel-r3.zip",
+      "sha256": "a53aa1747e19e8471bb839de21b570c70a34d868206ffac852e3e684cd284167",
+      "url": "https://github.com/JimVulkan/mali-panvk/releases/download/v1.2.0/mali-panvk-26.3.0-devel-r3.zip",
+      "library": "libdrnas_gpu_panvk_r3.so",
+      "minApi": 31
+    },
+    {
+      "id": "panvk_g52_v7",
+      "label": "PANVK G52 V7 \u00b7 eksperimentalno",
+      "target": "MALI_G52",
+      "kind": "panvk",
+      "archive": "PanVk-V7-0.0.2-alpha.zip",
+      "sha256": "a5da75ae597b23337825c5a35d480c7a7cc0c8655d35850ca5fd25b37ac78289",
+      "url": "https://github.com/LukeValen/panvk-mali-g52/releases/download/v0.0.2-alpha/PanVk-V7-0.0.2-alpha.zip",
+      "library": "libdrnas_gpu_panvk_g52_v7.so",
+      "minApi": 31
+    }
+  ]
+}

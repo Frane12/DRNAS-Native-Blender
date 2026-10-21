@@ -1,0 +1,27 @@
+name: Align Alpha 1.0 Git tag with verified APK source
+on:
+  push:
+    branches: [release/native-alpha-1.0]
+    paths: ['.github/workflows/align-alpha-1-0-tag.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  match-tag-to-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Make Alpha source archive correspond to verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG=native-alpha-v1.0
+          BUILT_SHA=f9207bbabbfbeb218fae575e5d830a29e9f0f44e
+          gh release view "$TAG" >/dev/null
+          gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$TAG" \
+            -f sha="$BUILT_SHA" -F force=true >/dev/null
+          FOUND="$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq '.object.sha')"
+          test "$FOUND" = "$BUILT_SHA"
+          echo "PASS: release tag $TAG now matches successful build commit $BUILT_SHA"

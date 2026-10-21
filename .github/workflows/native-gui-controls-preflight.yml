@@ -51,6 +51,8 @@ jobs:
           grep -Fq 'KEYCODE_F12' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
           grep -Fq 'DRNAS_A810_RENDER_LIMIT' upstream/intern/ghost/intern/GHOST_AndroidMemoryTier.hh
           grep -Fq 'Native Blender PreAlpha 0.1' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
+          grep -Fq 'android:versionName="0.1.0"' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
+          grep -Fq 'android:versionCode="1"' upstream/build_files/android/apk/app/src/main/AndroidManifest.xml
           grep -Fq 'DrnasGpuProfile.apply(this)' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
           grep -Fq 'installDrnasAndroidBack();' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
           grep -Fq 'closeSetupScreen()' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/DrnasSplashActivity.java

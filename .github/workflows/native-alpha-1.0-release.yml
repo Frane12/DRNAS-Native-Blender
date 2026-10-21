@@ -88,7 +88,7 @@ jobs:
           "$BT/aapt2" link -o fast/base.apk -I "$ANDROID_JAR" \
             --manifest upstream/build_files/android/apk/app/src/main/AndroidManifest.xml \
             fast/compiled/res.zip -A fast/unpacked/assets -0 zip --min-sdk-version 31 --target-sdk-version 34
-          OUT=native-controls-results/Native-Blender-Alpha-1.0-arm64.apk
+          OUT=native-controls-results/DRNAS-Native-Blender-Alpha-1.0-arm64.apk
           cp fast/base.apk "$OUT"
           (cd fast/dex && zip -q "../../$OUT" classes.dex)
           (cd fast/unpacked && zip -qr "../../$OUT" lib)

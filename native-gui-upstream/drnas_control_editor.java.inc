@@ -35,13 +35,16 @@
   }
   private void drnasKeyGeometry() {
     if (drnasEditKeyRows == null || drnasEditKeyScroll == null || drnasSizingKeys) return;
+    // Keep accepted v7 scrolling layout until the user edits geometry/order.
+    if (!drnasPrefs.contains("keyboard_width") && !drnasPrefs.contains("keyboard_height")
+        && !drnasPrefs.contains("keyboard_rows") && !drnasPrefs.contains("keyboard_order")) return;
     drnasSizingKeys = true;
     try {
       for (Button b : drnasSmallKeys) if (b.getParent() instanceof ViewGroup)
         ((ViewGroup)b.getParent()).removeView(b);
       drnasEditKeyRows.removeAllViews();
       int rows = Math.max(1, Math.min(5, drnasPrefs.getInt("keyboard_rows", 2)));
-      int count = drnasSmallKeys.size(), columns = Math.max(1, (count + rows - 1) / rows);
+      int count = drnasSmallKeys.size();
       int screen = getWindow().getDecorView().getWidth();
       if (screen <= 0) screen = getResources().getDisplayMetrics().widthPixels;
       int widthPercent = Math.max(40, Math.min(100, drnasPrefs.getInt("keyboard_width", 90)));
@@ -53,11 +56,12 @@
       cellHeight = Math.min(cellHeight, Math.max(dpDrnas(20), maxHeight / rows));
       drnasEditKeyScroll.setLayoutParams(new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
       drnasEditKeyRows.setLayoutParams(new android.widget.HorizontalScrollView.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
-      for (int start = 0; start < count; start += columns) {
+      for (int rowIndex = 0; rowIndex < rows; rowIndex++) {
+        int start = rowIndex * count / rows, end = (rowIndex + 1) * count / rows;
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
         row.setClipChildren(false); row.setClipToPadding(false);
         drnasEditKeyRows.addView(row, new LinearLayout.LayoutParams(width, cellHeight));
-        for (int i = start; i < Math.min(count, start + columns); i++) {
+        for (int i = start; i < end; i++) {
           Button b = drnasSmallKeys.get(i);
           String label = b.getText().toString().replace(" •", "");
           float weight = Math.max(4f, label.length() * 0.65f + 2f);
@@ -136,7 +140,7 @@
         drnasPrefs.edit().putInt("keyboard_rows", value).apply(); drnasKeyGeometry();
       });
       rows.addView(drnasUiLabel("Odaberi tipku i pomakni je u rasporedu"));
-      Spinner key = new Spinner(this, Spinner.MODE_DROPDOWN);
+      android.widget.Spinner key = new android.widget.Spinner(this, android.widget.Spinner.MODE_DROPDOWN);
       java.util.ArrayList<String> labels = new java.util.ArrayList<>();
       for (Button b : drnasSmallKeys) labels.add(b.getText().toString().replace(" •", ""));
       android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);

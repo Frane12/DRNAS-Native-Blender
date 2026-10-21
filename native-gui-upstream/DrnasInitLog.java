@@ -28,7 +28,7 @@ public final class DrnasInitLog {
     line("Resolution cap="+Os.getenv("DRNAS_RENDER_WIDTH")+"x"+Os.getenv("DRNAS_RENDER_HEIGHT")+" stretch="+a.getSharedPreferences("drnas_native_gpu_v1",0).getBoolean("stretch_screen",false));
     // Native loader messages only, for our own PID. Stop after startup; no frame tracing.
     try {
-      final Process process=new ProcessBuilder("logcat","-v","time","-T","1","--pid="+android.os.Process.myPid(),"blender-turnip:I","DRNAS-GPU:I","libc:F","*:S").redirectErrorStream(true).start();
+      final java.lang.Process process=new ProcessBuilder("logcat","-v","time","-T","1","--pid="+android.os.Process.myPid(),"blender-turnip:I","DRNAS-GPU:I","libc:F","*:S").redirectErrorStream(true).start();
       Thread reader=new Thread(()->{
         try(BufferedReader in=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8))) {
           String value;int lines=0;while((value=in.readLine())!=null&&lines++<180)line("NATIVE "+value);

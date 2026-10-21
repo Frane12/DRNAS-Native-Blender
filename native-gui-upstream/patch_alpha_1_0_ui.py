@@ -129,6 +129,16 @@ labels = {
         "Save could not start. Blender remains open.",
     "Spremanje nije dovršeno.": "Save was not completed.",
     " Aplikacija ostaje otvorena.": " Blender remains open.",
+    "Broj redova": "Number of rows",
+    "VELIČINA TIPKOVNICE I NAREDBI": "KEYBOARD AND COMMAND SIZE",
+    "VELIČINA BLENDER GUI (UI SCALE)": "BLENDER UI SCALE",
+    "Blender GUI veličina sprema se za iduće pokretanje.":
+        "Blender UI scale saved. Restart to apply.",
+    "Pomakni traku tipki": "Drag shortcut bar",
+    "Smooth zoom (kao EmuDRNAS)": "Smooth zoom (EmuDRNAS style)",
+    "% • tipkovnica i naredbe": "% • keyboard and commands",
+    "100%  • promjena nakon ponovnog pokretanja": "100%  • applies after restart",
+    "%  • primjena nakon restarta": "%  • applies after restart",
     "Stretch screen • popuni cijeli zaslon": "Stretch screen • fill available display",
     "Stretch spremljen. Manja rezolucija skalira se na cijeli prozor; omjer slike ostaje očuvan.":
         "Stretch saved. Lower render resolutions fill the window while preserving aspect ratio.",

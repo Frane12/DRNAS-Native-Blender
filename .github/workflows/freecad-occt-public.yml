@@ -1,0 +1,178 @@
+name: FreeCAD OCCT Android ARM64 - public runner
+on:
+  push:
+    branches: [experiment/freecad-arm64-public-runner]
+    paths:
+      - '.github/workflows/freecad-occt-public.yml'
+      - 'freecad-lab/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: occt-arm64-public-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NDK_VERSION: '27.2.12479018'
+  CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+  CCACHE_MAXSIZE: '2G'
+
+jobs:
+  occt:
+    name: Compile Android ARM64 OCCT native CAD libraries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake Ninja ccache and ELF tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build cmake ccache git binutils file
+          mkdir -p .cache/ccache out
+
+      - name: Use Android ARM64 NDK
+        run: |
+          set -euo pipefail
+          if [ ! -f "$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION"
+          fi
+          test -f "$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake"
+
+      - name: Test compiler target before large build
+        run: |
+          set -euo pipefail
+          printf 'int main(void){return 0;}\n' > out/test.c
+          "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -fPIE -pie out/test.c -o out/android-arm64-test
+          readelf -h out/android-arm64-test | grep -q 'Machine:.*AArch64'
+          readelf -l out/android-arm64-test | grep -q '/system/bin/linker64'
+
+      - name: Restore verified OCCT build outputs
+        id: occt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: out/occt-install
+          key: occt-arm64-v7.9.3-ndk27-api26-glibc-free-v2-${{ hashFiles('.github/workflows/freecad-occt-public.yml') }}
+
+      - name: Restore compiler cache
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/ccache
+          key: occt-aarch64-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            occt-aarch64-ccache-
+
+      - name: Clone exact official Open CASCADE 7.9.3
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch V7_9_3 https://github.com/Open-Cascade-SAS/OCCT.git /tmp/occt-src
+          test "$(git -C /tmp/occt-src rev-parse HEAD)" = "a016080bf6738d6aeae020badee4e888ad1540a5"
+
+      - name: Configure cross compilation (no desktop FreeCAD or Blender)
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cmake -S /tmp/occt-src -B /tmp/occt-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DANDROID_STL=c++_shared -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/out/occt-install" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DBUILD_LIBRARY_TYPE=Shared \
+            -DBUILD_MODULE_FoundationClasses=ON \
+            -DBUILD_MODULE_ModelingData=ON \
+            -DBUILD_MODULE_ModelingAlgorithms=ON \
+            -DBUILD_MODULE_Visualization=OFF \
+            -DBUILD_MODULE_ApplicationFramework=OFF \
+            -DBUILD_MODULE_DataExchange=OFF \
+            -DBUILD_MODULE_DETools=OFF \
+            -DBUILD_MODULE_Draw=OFF \
+            -DUSE_TK=OFF -DUSE_FREETYPE=OFF -DUSE_TBB=OFF -DUSE_VTK=OFF \
+            -DUSE_FREEIMAGE=OFF -DBUILD_DOC_Overview=OFF -DBUILD_DOC_RefMan=OFF
+
+      - name: Build and install OCCT Android ARM64
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cmake --build /tmp/occt-build --parallel 3 2>&1 | tee out/occt-build.log
+          cmake --install /tmp/occt-build 2>&1 | tee out/occt-install.log
+
+      - name: Verify Android ARM64 libraries and make checksums
+        run: |
+          set -euo pipefail
+          mapfile -t libs < <(find out/occt-install -type f -name 'lib*.so*' | sort)
+          if [ "${#libs[@]}" -lt 9 ]; then echo "::error::No CAD libraries built"; exit 1; fi
+          : > out/ELF-AUDIT.txt
+          for lib in "${libs[@]}"; do
+            readelf -h "$lib" | grep -q 'Class:.*ELF64'
+            readelf -h "$lib" | grep -q 'Machine:.*AArch64'
+            readelf -h "$lib" | grep -q 'Type:.*DYN'
+            if readelf -d "$lib" | grep -Eq 'libc\.so\.6|ld-linux|libstdc\+\+\.so\.6'; then
+              echo "::error::glibc dependency in $lib"; exit 1
+            fi
+            while read -r value; do
+              test $((value)) -ge 16384 || { echo "::error::ELF LOAD alignment <16K: $lib"; exit 1; }
+            done < <(readelf -lW "$lib" | awk '$1 == "LOAD" {print $NF}')
+            echo "PASS $lib" >> out/ELF-AUDIT.txt
+          done
+          (cd out/occt-install && find . -type f -name 'lib*.so*' -print0 | sort -z | xargs -0 sha256sum) > out/SHA256SUMS.txt
+          printf 'OCCT=V7_9_3\ncommit=a016080bf6738d6aeae020badee4e888ad1540a5\nplatform=Android arm64-v8a Bionic API26\nGUI=none\nFreeCAD=not built\n' > out/BUILD-INFO.txt
+          echo "VERIFIED ${#libs[@]} Android AArch64 OCCT libraries"
+
+      - name: Cache verified installed OCCT libraries
+        if: success() && steps.occt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out/occt-install
+          key: occt-arm64-v7.9.3-ndk27-api26-glibc-free-v2-${{ hashFiles('.github/workflows/freecad-occt-public.yml') }}
+
+      - name: Save ccache even if OCCT compile fails
+        if: always() && steps.occt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: .cache/ccache
+          key: occt-aarch64-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache --show-stats || true
+
+      - name: Pack verifiable native CAD result
+        if: success()
+        run: |
+          cp freecad-lab/README.md out/README.txt
+          tar -C out -czf out/DRNAS-FreeCAD-OCCT-Android-arm64.tar.gz occt-install ELF-AUDIT.txt SHA256SUMS.txt BUILD-INFO.txt README.txt
+          sha256sum out/DRNAS-FreeCAD-OCCT-Android-arm64.tar.gz > out/ARCHIVE-SHA256.txt
+
+      - name: Upload compiled CAD libraries as Actions artifact
+        id: upload
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeCAD-OCCT-Android-ARM64-${{ github.run_id }}
+          path: |
+            out/DRNAS-FreeCAD-OCCT-Android-arm64.tar.gz
+            out/ARCHIVE-SHA256.txt
+            out/ELF-AUDIT.txt
+            out/BUILD-INFO.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Save private draft fallback if Actions artifact quota blocks upload
+        if: success() && steps.upload.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="freecad-occt-arm64-lab-${GITHUB_RUN_ID}"
+          gh release create "$tag" out/DRNAS-FreeCAD-OCCT-Android-arm64.tar.gz out/ARCHIVE-SHA256.txt \
+            --draft --target "$GITHUB_SHA" \
+            --title "OCCT Android ARM64 CAD LAB (NOT FreeCAD APK)" \
+            --notes "Native ARM64 OCCT geometry libraries only. Experimental, no FreeCAD GUI or Android APK."

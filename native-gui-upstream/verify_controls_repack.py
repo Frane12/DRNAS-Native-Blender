@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Reject any Java-only controls APK that changes native or runtime payloads."""
 import hashlib
+import io
+from pathlib import Path
 import subprocess
 import sys
 import tempfile
@@ -11,6 +13,14 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
     actual = {n for n in output.namelist() if n.startswith(("lib/", "assets/")) and not n.endswith("/")}
     assert payloads == actual, "Native/runtime file list changed"
     for name in sorted(payloads):
+        if name == 'assets/blender_runtime.zip' and '--smooth-runtime' in sys.argv:
+            with zipfile.ZipFile(io.BytesIO(original.read(name))) as before, zipfile.ZipFile(io.BytesIO(output.read(name))) as after:
+                added = 'scripts/startup/drnas_native_smooth_zoom.py'
+                assert set(after.namelist()) == set(before.namelist()) | {added}
+                for entry in before.namelist():
+                    assert before.read(entry) == after.read(entry), entry
+                assert after.read(added) == Path(__file__).with_name('drnas_native_smooth_zoom.py').read_bytes()
+            continue
         assert hashlib.sha256(original.read(name)).digest() == hashlib.sha256(output.read(name)).digest(), name
     dex = output.read("classes.dex")
     for name in (b"Landroid/widget/PopupWindow;", b"drnasAddPanel", b"setTouchModal",
@@ -20,10 +30,12 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
         for name in (b"DrnasTrackpad", b"relative_mouse", b"pointer_effect", b"mouse_speed",
                      b"Box Select", b"Select All", b"Play/Pause", b"Keyboard"):
             assert name in dex, f"Missing EMU control option: {name!r}"
+    if '--smooth-runtime' in sys.argv:
+        assert b'drnasOfferZoom' in dex and b'shortcut_expanded' in dex
     with tempfile.NamedTemporaryFile(suffix=".so") as lib:
         lib.write(output.read("lib/arm64-v8a/libblender.so"))
         lib.flush()
         symbols = subprocess.check_output(["readelf", "--dyn-syms", "--wide", lib.name], text=True)
         for name in ("nativeOnDrnasInput", "nativeOnKey"):
             assert "Java_org_blender_blender_BlenderActivity_" + name in symbols, name
-print(f"PASS: {len(payloads)} unchanged native/runtime files; popup controls in DEX; existing JNI exports verified")
+print('PASS: all native libraries identical; runtime originals unchanged; permitted smooth-zoom startup verified; controls/JNI verified')

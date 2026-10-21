@@ -1,9 +1,9 @@
-name: Emu-style controls v2 TEST - Java only, identical Blender binary
+name: Controls v3 TEST - layout fix and smooth zoom, identical Blender binary
 
 on:
   push:
     branches: [fix/native-controls-popup-windows]
-    paths: [".github/workflows/native-controls-popup-test.yml", "native-gui-upstream/fix_native_control_windows.py", "native-gui-upstream/drnas_control_windows.java.inc", "native-gui-upstream/add_emu_control_options.py", "native-gui-upstream/drnas_mouse_options.java.inc"]
+    paths: [".github/workflows/native-controls-popup-test.yml", "native-gui-upstream/fix_native_control_windows.py", "native-gui-upstream/drnas_control_windows.java.inc", "native-gui-upstream/add_emu_control_options.py", "native-gui-upstream/drnas_mouse_options.java.inc", "native-gui-upstream/polish_controls_smooth_zoom.py", "native-gui-upstream/drnas_smooth_zoom.java.inc", "native-gui-upstream/drnas_native_smooth_zoom.py"]
   workflow_dispatch:
 
 permissions:
@@ -64,17 +64,19 @@ jobs:
           python3 native-gui-upstream/patch_release_exit_no_log.py upstream
           python3 native-gui-upstream/fix_native_control_windows.py upstream
           python3 native-gui-upstream/add_emu_control_options.py upstream
+          python3 native-gui-upstream/polish_controls_smooth_zoom.py upstream
+          python3 native-gui-upstream/test_smooth_zoom.py
           python3 - <<'PY'
           from pathlib import Path
           manifest = Path("upstream/build_files/android/apk/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
           assert text.count('package="org.blender.blender"') == 1
           text = text.replace('package="org.blender.blender"',
-                              'package="hr.drnas.blendernativecontrolstest2026v2"', 1)
+                              'package="hr.drnas.blendernativecontrolstest2026v3"', 1)
           assert 'android:versionName="0.1.0"' in text, "Release version missing from actual aapt2 manifest"
-          text = text.replace('android:versionCode="1"', 'android:versionCode="3"')
-          text = text.replace('android:versionName="0.1.0"', 'android:versionName="0.1.2-emu-controls-test"')
-          text = text.replace('Native Blender PreAlpha 0.1', 'Native Blender EMU Controls TEST')
+          text = text.replace('android:versionCode="1"', 'android:versionCode="4"')
+          text = text.replace('android:versionName="0.1.0"', 'android:versionName="0.1.3-smooth-controls-test"')
+          text = text.replace('Native Blender PreAlpha 0.1', 'Native Blender Smooth Controls TEST')
           manifest.write_text(text)
           PY
           ! grep -Fq 'blender-startup.log' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
@@ -88,6 +90,7 @@ jobs:
           mkdir -p fast/unpacked fast/javac fast/dex fast/compiled
           unzip -q recovered/native-success-original.apk 'lib/*' 'assets/*' -d fast/unpacked
           test -s fast/unpacked/lib/arm64-v8a/libblender.so
+          python3 native-gui-upstream/package_smooth_zoom_runtime.py fast/unpacked/assets/blender_runtime.zip
           JAVA_DIR=upstream/build_files/android/apk/app/src/main/java/org/blender/blender
           "$JAVA_HOME/bin/javac" --release 17 -classpath "$ANDROID_JAR" \
             -d fast/javac \
@@ -104,7 +107,7 @@ jobs:
             fast/compiled/res.zip -A fast/unpacked/assets -0 zip \
             --min-sdk-version 31 --target-sdk-version 34
           mkdir -p native-controls-results
-          OUT=native-controls-results/Native-Blender-EMU-Controls-v2-TEST-arm64.apk
+          OUT=native-controls-results/Native-Blender-Smooth-Controls-v3-TEST-arm64.apk
           cp fast/base.apk "$OUT"
           (cd fast/dex && zip -q "../../$OUT" classes.dex)
           (cd fast/unpacked && zip -qr "../../$OUT" lib)
@@ -117,16 +120,16 @@ jobs:
           "$BT/apksigner" sign --ks fast/drnas-prealpha.keystore \
             --ks-pass pass:android --key-pass pass:android "$OUT"
           "$BT/apksigner" verify --verbose "$OUT"
-          "$BT/aapt" dump badging "$OUT" | grep -F 'hr.drnas.blendernativecontrolstest2026v2'
-          "$BT/aapt" dump badging "$OUT" | grep -F 'Native Blender EMU Controls TEST'
-          "$BT/aapt" dump badging "$OUT" | grep -F "versionName='0.1.2-emu-controls-test'"
+          "$BT/aapt" dump badging "$OUT" | grep -F 'hr.drnas.blendernativecontrolstest2026v3'
+          "$BT/aapt" dump badging "$OUT" | grep -F 'Native Blender Smooth Controls TEST'
+          "$BT/aapt" dump badging "$OUT" | grep -F "versionName='0.1.3-smooth-controls-test'"
           unzip -Z1 "$OUT" | grep -Fqx 'lib/arm64-v8a/libblender.so'
           unzip -Z1 "$OUT" | grep -Fqx 'assets/blender_runtime.zip'
           # Critical: native library must be byte-identical to previous success.
           unzip -p recovered/native-success-original.apk lib/arm64-v8a/libblender.so | sha256sum > fast/original-native.sha
           unzip -p "$OUT" lib/arm64-v8a/libblender.so | sha256sum > fast/repacked-native.sha
           cmp fast/original-native.sha fast/repacked-native.sha
-          python3 native-gui-upstream/verify_controls_repack.py recovered/native-success-original.apk "$OUT" --emu
+          python3 native-gui-upstream/verify_controls_repack.py recovered/native-success-original.apk "$OUT" --emu --smooth-runtime
           (cd native-controls-results && sha256sum *.apk > SHA256SUMS.txt)
           cp native-gui-upstream/README.md native-controls-results/SOURCE-ATTRIBUTION.txt
           cp recovered/SOURCE-APK-SHA256.txt native-controls-results/SOURCE-APK-SHA256.txt
@@ -136,7 +139,7 @@ jobs:
       - name: Upload APK even if GitHub Release permission fails
         uses: actions/upload-artifact@v4
         with:
-          name: Native-Blender-EMU-Controls-v2-TEST-${{ github.run_id }}
+          name: Native-Blender-Smooth-Controls-v3-TEST-${{ github.run_id }}
           path: native-controls-results/
           if-no-files-found: error
           retention-days: 30

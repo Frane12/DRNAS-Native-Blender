@@ -41,6 +41,9 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
     if '--save-exit' in sys.argv:
         for name in (b'drnasSaveAndExit', b'drnasPollSaveExit', b'cursor_percent', b'zoom_visible', b'drnasStyleKey'):
             assert name in dex, f'Missing polished controls or safe exit: {name!r}'
+    if '--latch' in sys.argv:
+        for name in (b'DrnasInputHold', b'drnasMouseButtonSizes', b'mouse_button_percent', b'drnasReleaseAllInputs'):
+            assert name in dex, f'Missing input latch or separate sizing: {name!r}'
     with tempfile.NamedTemporaryFile(suffix=".so") as lib:
         lib.write(output.read("lib/arm64-v8a/libblender.so"))
         lib.flush()

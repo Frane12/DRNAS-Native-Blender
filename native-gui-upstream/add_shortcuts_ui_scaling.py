@@ -236,8 +236,35 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
     options.setOrientation(LinearLayout.VERTICAL);
     options.setPadding(dpDrnas(10), dpDrnas(8), dpDrnas(10), dpDrnas(8));
     options.setBackground(drnasPill(Color.argb(248, 15, 30, 47)));
+    options.setElevation(dpDrnas(9));
 
-    final TextView wheelHeading = drnasUiLabel("VELIČINA TIPKI • kotačić / – +");
+    // One compact English-language menu with a discoverable dismiss action.
+    final LinearLayout optionsHeader = new LinearLayout(this);
+    optionsHeader.setOrientation(LinearLayout.HORIZONTAL);
+    optionsHeader.setGravity(Gravity.CENTER_VERTICAL);
+    final TextView optionsTitle = drnasUiLabel("DRNAS CONTROLS");
+    optionsTitle.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+    optionsTitle.setTextSize(13f);
+    optionsHeader.addView(optionsTitle, new LinearLayout.LayoutParams(
+        0, dpDrnas(35), 1f));
+    final Button closeOptions = new Button(this);
+    closeOptions.setText("X");
+    closeOptions.setAllCaps(false);
+    closeOptions.setTextColor(drnasTextWhite);
+    closeOptions.setTextSize(14f);
+    closeOptions.setPadding(0, 0, 0, 0);
+    closeOptions.setMinWidth(0);
+    closeOptions.setMinimumWidth(0);
+    closeOptions.setMinHeight(0);
+    closeOptions.setMinimumHeight(0);
+    closeOptions.setBackground(drnasPill(Color.rgb(37, 82, 114)));
+    closeOptions.setContentDescription("Close controls settings");
+    closeOptions.setOnClickListener(v -> options.setVisibility(View.GONE));
+    optionsHeader.addView(closeOptions, new LinearLayout.LayoutParams(
+        dpDrnas(38), dpDrnas(33)));
+    options.addView(optionsHeader);
+
+    final TextView wheelHeading = drnasUiLabel("BUTTON SIZE  •  wheel / - +");
     options.addView(wheelHeading);
     final LinearLayout wheel = new LinearLayout(this);
     wheel.setGravity(Gravity.CENTER_VERTICAL);
@@ -252,12 +279,12 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
     wheel.addView(sizeSeek, new LinearLayout.LayoutParams(dpDrnas(155), dpDrnas(44)));
     wheel.addView(larger, new LinearLayout.LayoutParams(dpDrnas(50), dpDrnas(44)));
     options.addView(wheel);
-    final TextView sizeValue = drnasUiLabel(drnasButtonPercent + "% • LMB/RMB + shortcut tipke");
+    final TextView sizeValue = drnasUiLabel(drnasButtonPercent + "%  •  mouse + shortcut keys");
     options.addView(sizeValue);
     sizeSeek.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
       public void onProgressChanged(android.widget.SeekBar b, int p, boolean fromUser) {
         drnasButtonSizes(p + 60, true);
-        sizeValue.setText(drnasButtonPercent + "% • LMB/RMB + shortcut tipke");
+        sizeValue.setText(drnasButtonPercent + "%  •  mouse + shortcut keys");
       }
       public void onStartTrackingTouch(android.widget.SeekBar b) {}
       public void onStopTrackingTouch(android.widget.SeekBar b) {}
@@ -280,8 +307,8 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
     settings.setOnGenericMotionListener(resizeOnWheel);
     scroll.setOnGenericMotionListener(resizeOnWheel);
     for (Button key : drnasSmallKeys) key.setOnGenericMotionListener(resizeOnWheel);
-    options.addView(drnasUiLabel("VELIČINA BLENDER GUI (UI SCALE)"));
-    final TextView guiLabel = drnasUiLabel("100%  • promjena nakon ponovnog pokretanja");
+    options.addView(drnasUiLabel("BLENDER UI SCALE"));
+    final TextView guiLabel = drnasUiLabel("100%  •  applies after restart");
     options.addView(guiLabel);
     final android.widget.SeekBar uiSeek = new android.widget.SeekBar(this);
     uiSeek.setMax(125);  // 75..200%.
@@ -289,20 +316,20 @@ swap("  private void addDrnasCommand(LinearLayout row, String label, int android
         drnasPrefs.getInt("blender_ui_percent", 100)));
     uiSeek.setProgress(loaded - 75);
     options.addView(uiSeek, new LinearLayout.LayoutParams(dpDrnas(260), dpDrnas(45)));
-    guiLabel.setText(loaded + "%  • primjena nakon restarta");
+    guiLabel.setText(loaded + "%  •  applies after restart");
     uiSeek.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
       public void onProgressChanged(android.widget.SeekBar b, int p, boolean user) {
-        guiLabel.setText((p + 75) + "%  • primjena nakon restarta");
+        guiLabel.setText((p + 75) + "%  •  applies after restart");
         if (user) drnasPrefs.edit().putInt("blender_ui_percent", p + 75).apply();
       }
       public void onStartTrackingTouch(android.widget.SeekBar b) {}
       public void onStopTrackingTouch(android.widget.SeekBar b) {
         android.widget.Toast.makeText(BlenderActivity.this,
-            "Blender GUI veličina sprema se za iduće pokretanje.",
+            "UI scale saved. Restart Blender to apply.",
             android.widget.Toast.LENGTH_SHORT).show();
       }
     });
-    options.addView(drnasUiLabel("EDIT: pomakni panel prstom, DONE: spremi položaj"));
+    options.addView(drnasUiLabel("EDIT: drag a control  •  DONE: finish"));
     drnasEnableDrag(wheelHeading, line, "shortcut_strip");
 
     final FrameLayout.LayoutParams settingPosition = new FrameLayout.LayoutParams(

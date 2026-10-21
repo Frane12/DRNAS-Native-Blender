@@ -38,12 +38,7 @@ public final class DrnasGpuProfile {
     } catch (Exception exception) {
       Log.w(TAG, "Could not select GPU-specific Vulkan profile", exception);
     }
-    if (a810) {
-      Log.i(TAG, "GPU=" + gpu + "; enable Vulkan buffer <=960x544; "
-                     + "do not change physical display resolution");
-    } else {
-      Log.i(TAG, "GPU=" + gpu + "; default Vulkan profile (A840 unchanged)");
-    }
+    // Keep release startup quiet. Warnings above remain available in logcat.
   }
 
   private static String queryGlesRenderer() {

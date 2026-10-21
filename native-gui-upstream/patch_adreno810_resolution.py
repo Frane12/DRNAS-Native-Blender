@@ -112,9 +112,8 @@ w = once(w, """static void ghost_android_apply_render_scale(ANativeWindow *nativ
     const float touch_factor = float(aw) / float(native_w);
     if (ANativeWindow_setBuffersGeometry(native_window, aw, ah, 0) == 0) {
       GHOST_android_drnas_touch_ratio().store(touch_factor, std::memory_order_relaxed);
-      __android_log_print(ANDROID_LOG_INFO, "DRNAS-A810",
-                          "Adreno 810: %dx%d -> %dx%d (Vulkan only, ratio %.3f)",
-                          native_w, native_h, aw, ah, touch_factor);
+      /* Quiet release build: geometry selection is not a user-visible event.
+       * Keep the failure warning below for actionable diagnostics. */
     }
     else {
       GHOST_android_drnas_touch_ratio().store(1.0f, std::memory_order_relaxed);

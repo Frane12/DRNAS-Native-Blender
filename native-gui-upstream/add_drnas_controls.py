@@ -32,7 +32,7 @@ once("    addContentView(bar, params);", """    addContentView(bar, params);
       edit.setText(drnasEdit ? "DONE" : "EDIT");
     });
     final Button sens = new Button(this);
-    sens.setText("SENS");
+    sens.setText("SPEED");
     sens.setAllCaps(false);
     sens.setTextSize(11);
     sens.setMinWidth(0);
@@ -191,7 +191,7 @@ methods="""
     slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
       public void onProgressChanged(SeekBar bar, int progress, boolean user) {
         float factor = 0.08f + 0.0092f * progress;
-        speedLabel.setText("2 prsta: " + Math.round(factor * 100f) + "% brzine");
+        speedLabel.setText("Two-finger speed: " + Math.round(factor * 100f) + "%");
         nativeOnDrnasInput(7, 0f, 0f, factor);
         if (user) drnasPrefs.edit().putInt("gesture_speed", progress).apply();
       }

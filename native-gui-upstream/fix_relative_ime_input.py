@@ -153,9 +153,9 @@ for old, new in (
     ('android:versionCode="9"', 'android:versionCode="10"'),
 ):
     found = m.count(old)
-    if found != 1:
-        raise RuntimeError(f"Expected exactly one manifest anchor, got {found}: {old!r}")
-    m = m.replace(old, new, 1)
+    if found < 1 or (old != "Native Blender Controls v8 TEST" and found != 1):
+        raise RuntimeError(f"Unexpected manifest anchor count {found}: {old!r}")
+    m = m.replace(old, new)
 manifest.write_text(m, encoding="utf-8")
 
 assert "nativeOnCommitText(text.substring(common))" in source

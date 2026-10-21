@@ -1,0 +1,56 @@
+name: Sync Native Blender PreAlpha 0.1 public release notes
+
+# The original APK build checks out a pinned commit: documentation changed
+# while it is compiling is not visible to that run. After a successful run,
+# update the published release description from the *current public release
+# branch*, without rebuilding or re-uploading the APK.
+on:
+  workflow_run:
+    workflows: ["Native Blender PreAlpha 0.1 ARM64 APK"]
+    types: [completed]
+  push:
+    paths:
+      - ".github/workflows/sync-native-prealpha-release-notes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-prealpha-notes-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-notes:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'release/native-prealpha-0.1' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out latest public prerelease documentation only
+        uses: actions/checkout@v4
+        with:
+          ref: release/native-prealpha-0.1
+          persist-credentials: false
+
+      - name: Refresh public pre-alpha description after verified APK is published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG=native-prealpha-v0.1
+          NOTES=native-gui-upstream/RELEASE_NOTES_PREALPHA_0_1.md
+          test -s "$NOTES"
+          if ! gh release view "$TAG" --json id >/dev/null 2>&1; then
+            echo "No public release yet; the APK build will publish only after verification."
+            exit 0
+          fi
+          gh release edit "$TAG" \
+            --title "Native Blender PreAlpha 0.1" \
+            --notes-file "$NOTES" \
+            --prerelease
+          gh release view "$TAG" --json url,isDraft,isPrerelease,assets

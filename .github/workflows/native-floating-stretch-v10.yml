@@ -1,0 +1,110 @@
+name: Native Blender v10 TEST - floating windows and stretch pointer
+on:
+  push:
+    branches: [fix/native-floating-windows-stretch-v10]
+    paths: ['.github/workflows/native-floating-stretch-v10.yml', 'native-gui-upstream/add_control_group_editor.py', 'native-gui-upstream/fix_relative_ime_input.py', 'native-gui-upstream/fix_floating_stretch_v10.py', 'native-gui-upstream/FLOATING_STRETCH_V10_NOTES.md', 'native-gui-upstream/drnas_control_editor.java.inc', 'native-gui-upstream/DrnasInitLog.java', 'native-gui-upstream/drnas_native_gpu_init.py', 'native-gui-upstream/package_control_editor_runtime.py', 'native-gui-upstream/verify_control_editor_repack.py', 'native-gui-upstream/test_gpu_init_report.py']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: floating-stretch-v10-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  repack-working-gpu-binary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          path: upstream
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+          sparse-checkout: |
+            build_files/android
+            build_files/cmake
+            intern/ghost/intern
+            source/blender/gpu/vulkan
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Recover confirmed GPU v7 APK - never compile native Blender
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p recovered
+          gh run download 39562098774 --name Native-Blender-GPU-v7-TEST-39562098774 --dir recovered
+          (cd recovered && sha256sum -c SHA256SUMS.txt)
+          test -s recovered/Native-Blender-GPU-v7-TEST-arm64.apk
+          python3 native-gui-upstream/verify_gpu_apk.py recovered/Native-Blender-GPU-v7-TEST-arm64.apk
+      - name: Preserve native GPU baseline in an unpublished durable backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! gh release view native-gpu-v7-binary-base >/dev/null 2>&1; then
+            gh release create native-gpu-v7-binary-base recovered/Native-Blender-GPU-v7-TEST-arm64.apk recovered/SHA256SUMS.txt recovered/GPU-DRIVER-MANIFEST.json \
+              --target c346ab30e2dc696b4aac9df1a95dcb1996710db1 --draft \
+              --title 'Native GPU v7 binary baseline - internal backup' \
+              --notes 'User-confirmed GPU v7 APK for future Java/Python-only repacks. Original signed APK and checksums preserved. Not a public release.'
+          fi
+      - name: Apply controls v8 plus v9 input bridge and v10 floating-window stretch patch
+        run: |
+          set -euo pipefail
+          bash native-gui-upstream/apply_gpu_test_patches.sh upstream
+          python3 native-gui-upstream/add_control_group_editor.py upstream
+          python3 native-gui-upstream/fix_relative_ime_input.py upstream
+          python3 native-gui-upstream/fix_floating_stretch_v10.py upstream
+          python3 native-gui-upstream/test_gpu_init_report.py
+          python3 native-gui-upstream/test_smooth_zoom.py
+          python3 native-gui-upstream/test_save_exit.py
+          mkdir -p tests-jvm
+          javac -d tests-jvm native-gui-upstream/DrnasInputHold.java native-gui-upstream/DrnasInputHoldTest.java native-gui-upstream/DrnasZoomSpring.java native-gui-upstream/DrnasZoomSpringTest.java native-gui-upstream/DrnasGpuPolicy.java native-gui-upstream/DrnasGpuPolicyTest.java
+          java -cp tests-jvm DrnasInputHoldTest
+          java -cp tests-jvm DrnasZoomSpringTest
+          java -cp tests-jvm org.blender.blender.DrnasGpuPolicyTest
+      - name: Compile Java UI and repackage exact accepted native libraries
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
+          ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+          BT="$ANDROID_HOME/build-tools/35.0.1"
+          mkdir -p fast/unpacked fast/javac fast/dex fast/compiled native-controls-results
+          unzip -q recovered/Native-Blender-GPU-v7-TEST-arm64.apk 'lib/*' 'assets/*' -d fast/unpacked
+          python3 native-gui-upstream/package_control_editor_runtime.py fast/unpacked/assets/blender_runtime.zip
+          javac --release 17 -classpath "$ANDROID_JAR" -d fast/javac upstream/build_files/android/apk/app/src/main/java/org/blender/blender/*.java
+          "$BT/d8" --min-api 31 --output fast/dex $(find fast/javac -name '*.class')
+          "$BT/aapt2" compile --dir upstream/build_files/android/apk/app/src/main/res -o fast/compiled/res.zip
+          "$BT/aapt2" link -o fast/base.apk -I "$ANDROID_JAR" \
+            --manifest upstream/build_files/android/apk/app/src/main/AndroidManifest.xml \
+            fast/compiled/res.zip -A fast/unpacked/assets -0 zip --min-sdk-version 31 --target-sdk-version 34
+          OUT=native-controls-results/Native-Blender-Floating-Stretch-v10-TEST-arm64.apk
+          cp fast/base.apk "$OUT"
+          (cd fast/dex && zip -q "../../$OUT" classes.dex)
+          (cd fast/unpacked && zip -qr "../../$OUT" lib)
+          "$BT/zipalign" -f -p 4 "$OUT" fast/aligned.apk
+          mv fast/aligned.apk "$OUT"
+          keytool -genkeypair -keystore fast/controls-v8.keystore -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=DRNAS Controls TEST,O=DRNAS,C=HR'
+          "$BT/apksigner" sign --ks fast/controls-v8.keystore --ks-pass pass:android --key-pass pass:android "$OUT"
+          "$BT/apksigner" verify --verbose "$OUT"
+          "$BT/aapt" dump badging "$OUT" | grep -F 'hr.drnas.blendernativefloatingstretcht2026v10'
+          python3 native-gui-upstream/verify_control_editor_repack.py recovered/Native-Blender-GPU-v7-TEST-arm64.apk "$OUT"
+          python3 native-gui-upstream/verify_gpu_apk.py "$OUT"
+          (cd native-controls-results && sha256sum *.apk > SHA256SUMS.txt)
+          cp native-gui-upstream/FLOATING_STRETCH_V10_NOTES.md native-controls-results/README.md
+          cp recovered/GPU-DRIVER-MANIFEST.json native-controls-results/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Blender-Floating-Stretch-v10-TEST-${{ github.run_id }}
+          path: native-controls-results/
+          if-no-files-found: error
+          retention-days: 30

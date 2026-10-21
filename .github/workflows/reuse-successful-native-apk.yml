@@ -1,0 +1,167 @@
+name: Reuse successful native Blender ELF - fast PreAlpha 0.1 APK
+
+on:
+  push:
+    branches: [release/native-prealpha-0.1]
+    paths: [".github/workflows/reuse-successful-native-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  repackage-without-native-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out release patch scripts
+        uses: actions/checkout@v4
+
+      - name: Check out pinned upstream Java, manifest and resource sources only
+        uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          path: upstream
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+          sparse-checkout: |
+            build_files/android/apk
+          sparse-checkout-cone-mode: true
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download last successful DRNAS native APK - no C++ compilation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p recovered
+          gh run download 39512921873 \
+            --name Blender-Native-Android-Pre-Alpha-2026-39512921873 \
+            --dir recovered
+          ls -lh recovered
+          ORIGINAL="$(find recovered -maxdepth 1 -name '*.apk' -type f | head -1)"
+          test -n "$ORIGINAL"
+          test -s "$ORIGINAL"
+          cp "$ORIGINAL" recovered/native-success-original.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify recovered/native-success-original.apk
+          unzip -Z1 recovered/native-success-original.apk | grep -Fqx 'lib/arm64-v8a/libblender.so'
+          unzip -Z1 recovered/native-success-original.apk | grep -Fqx 'assets/blender_runtime.zip'
+          sha256sum recovered/native-success-original.apk > recovered/SOURCE-APK-SHA256.txt
+
+      - name: Apply release Java-only changes to matching upstream source
+        run: |
+          set -euo pipefail
+          python3 native-gui-upstream/create_sdl3_gui_preview.py upstream/build_files/android/apk
+          python3 native-gui-upstream/add_drnas_controls.py upstream/build_files/android/apk
+          python3 native-gui-upstream/add_shortcuts_ui_scaling.py upstream
+          python3 native-gui-upstream/add_drnas_splash.py upstream
+          python3 native-gui-upstream/add_adreno810_autoprofile.py upstream
+          python3 native-gui-upstream/set_pre_alpha_app_identity.py upstream
+          python3 native-gui-upstream/patch_release_exit_no_log.py upstream
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("upstream/build_files/android/apk/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+          assert text.count('package="org.blender.blender"') == 1
+          text = text.replace('package="org.blender.blender"',
+                              'package="hr.drnas.blendernativeprealpha2026"', 1)
+          assert 'android:versionName="0.1.0"' in text, "Release version missing from actual aapt2 manifest"
+          manifest.write_text(text)
+          PY
+          ! grep -Fq 'blender-startup.log' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+          grep -Fq 'installDrnasAndroidBack();' upstream/build_files/android/apk/app/src/main/java/org/blender/blender/BlenderActivity.java
+
+      - name: Rebuild ONLY Android Java, manifest, dex and APK container
+        run: |
+          set -euo pipefail
+          ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+          BT="$ANDROID_HOME/build-tools/35.0.1"
+          mkdir -p fast/unpacked fast/javac fast/dex fast/compiled
+          unzip -q recovered/native-success-original.apk 'lib/*' 'assets/*' -d fast/unpacked
+          test -s fast/unpacked/lib/arm64-v8a/libblender.so
+          JAVA_DIR=upstream/build_files/android/apk/app/src/main/java/org/blender/blender
+          "$JAVA_HOME/bin/javac" --release 17 -classpath "$ANDROID_JAR" \
+            -d fast/javac \
+            "$JAVA_DIR/BlenderActivity.java" \
+            "$JAVA_DIR/DrnasSplashActivity.java" \
+            "$JAVA_DIR/DrnasGpuProfile.java"
+          "$BT/d8" --min-api 31 --output fast/dex \
+            $(find fast/javac -name '*.class')
+          "$BT/aapt2" compile \
+            --dir upstream/build_files/android/apk/app/src/main/res \
+            -o fast/compiled/res.zip
+          "$BT/aapt2" link -o fast/base.apk -I "$ANDROID_JAR" \
+            --manifest upstream/build_files/android/apk/app/src/main/AndroidManifest.xml \
+            fast/compiled/res.zip -A fast/unpacked/assets -0 zip \
+            --min-sdk-version 31 --target-sdk-version 34
+          mkdir -p native-controls-results
+          OUT=native-controls-results/Native-Blender-PreAlpha-0.1-arm64.apk
+          cp fast/base.apk "$OUT"
+          (cd fast/dex && zip -q "../../$OUT" classes.dex)
+          (cd fast/unpacked && zip -qr "../../$OUT" lib)
+          "$BT/zipalign" -f -p 4 "$OUT" fast/aligned.apk
+          mv fast/aligned.apk "$OUT"
+          keytool -genkeypair \
+            -keystore fast/drnas-prealpha.keystore -storepass android \
+            -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=DRNAS PreAlpha Debug,O=DRNAS,C=HR"
+          "$BT/apksigner" sign --ks fast/drnas-prealpha.keystore \
+            --ks-pass pass:android --key-pass pass:android "$OUT"
+          "$BT/apksigner" verify --verbose "$OUT"
+          "$BT/aapt" dump badging "$OUT" | grep -F 'hr.drnas.blendernativeprealpha2026'
+          "$BT/aapt" dump badging "$OUT" | grep -F 'Native Blender PreAlpha 0.1'
+          "$BT/aapt" dump badging "$OUT" | grep -F "versionName='0.1.0'"
+          unzip -Z1 "$OUT" | grep -Fqx 'lib/arm64-v8a/libblender.so'
+          unzip -Z1 "$OUT" | grep -Fqx 'assets/blender_runtime.zip'
+          # Critical: native library must be byte-identical to previous success.
+          unzip -p recovered/native-success-original.apk lib/arm64-v8a/libblender.so | sha256sum > fast/original-native.sha
+          unzip -p "$OUT" lib/arm64-v8a/libblender.so | sha256sum > fast/repacked-native.sha
+          cmp fast/original-native.sha fast/repacked-native.sha
+          (cd native-controls-results && sha256sum *.apk > SHA256SUMS.txt)
+          cp native-gui-upstream/README.md native-controls-results/SOURCE-ATTRIBUTION.txt
+          cp recovered/SOURCE-APK-SHA256.txt native-controls-results/SOURCE-APK-SHA256.txt
+          ls -lh "$OUT"
+          echo 'PASS: same successful native Blender binary; Android exit/no-log Java repackaged, signed and verified.'
+
+      - name: Upload APK even if GitHub Release permission fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: Native-Blender-PreAlpha-0.1-REUSED-NATIVE-${{ github.run_id }}
+          path: native-controls-results/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish verified public GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG=native-prealpha-v0.1
+          FILES=(
+            native-controls-results/Native-Blender-PreAlpha-0.1-arm64.apk
+            native-controls-results/SHA256SUMS.txt
+            native-controls-results/SOURCE-ATTRIBUTION.txt
+            native-controls-results/SOURCE-APK-SHA256.txt
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+            gh release edit "$TAG" --title "Native Blender PreAlpha 0.1" \
+              --notes-file native-gui-upstream/RELEASE_NOTES_PREALPHA_0_1.md --prerelease
+          else
+            gh release create "$TAG" "${FILES[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "Native Blender PreAlpha 0.1" \
+              --notes-file native-gui-upstream/RELEASE_NOTES_PREALPHA_0_1.md \
+              --prerelease
+          fi
+          gh release view "$TAG" --json url,assets

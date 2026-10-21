@@ -16,6 +16,10 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
     for name in (b"Landroid/widget/PopupWindow;", b"drnasAddPanel", b"setTouchModal",
                  b"setSplitTouchEnabled", b"nativeOnDrnasInput", b"installDrnasControls"):
         assert name in dex, f"Missing packaged controls: {name!r}"
+    if "--emu" in sys.argv:
+        for name in (b"DrnasTrackpad", b"relative_mouse", b"pointer_effect", b"mouse_speed",
+                     b"Box Select", b"Select All", b"Play/Pause", b"Keyboard"):
+            assert name in dex, f"Missing EMU control option: {name!r}"
     with tempfile.NamedTemporaryFile(suffix=".so") as lib:
         lib.write(output.read("lib/arm64-v8a/libblender.so"))
         lib.flush()

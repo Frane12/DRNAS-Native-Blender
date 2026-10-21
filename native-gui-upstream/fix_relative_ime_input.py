@@ -140,15 +140,10 @@ once(
 )
 
 # Keep installed v8 untouched; install v9 side-by-side for user comparison.
-once('hr.drnas.blendernativecontrolstest2026v8',
-     'hr.drnas.blendernativepointerimetest2026v9')
 # AndroidManifest versionName/label are handled in the same source-level
 # manifest that the v8 workflow repack signs.
 java.write_text(source, encoding="utf-8")
 
-manifest = java.parents[3] / "AndroidManifest.xml"
-# java path: app/src/main/java/org/blender/blender/BlenderActivity.java;
-# parent[4] = app/src/main, not parent[3] = app/src/main/java.
 manifest = java.parents[4] / "AndroidManifest.xml"
 m = manifest.read_text(encoding="utf-8")
 for old, new in (

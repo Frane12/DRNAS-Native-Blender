@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Add one startup script; preserve every existing runtime member byte-for-byte."""
+"""Add zoom and safe-exit startup scripts; preserve all original runtime members."""
 from pathlib import Path
 import sys
 import zipfile
 
 p = Path(sys.argv[1])
-script = Path(__file__).with_name('drnas_native_smooth_zoom.py').read_bytes()
-compile(script, 'drnas_native_smooth_zoom.py', 'exec')
+scripts = {n: Path(__file__).with_name(n).read_bytes() for n in
+           ('drnas_native_smooth_zoom.py', 'drnas_native_save_exit.py')}
+for name, script in scripts.items():
+    compile(script, name, 'exec')
 tmp = p.with_suffix('.new.zip')
-name = 'scripts/startup/drnas_native_smooth_zoom.py'
 with zipfile.ZipFile(p) as source, zipfile.ZipFile(tmp, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as output:
-    assert name not in source.namelist(), 'Unexpected existing startup script'
+    assert not any('scripts/startup/' + n in source.namelist() for n in scripts)
     for info in source.infolist():
         output.writestr(info, source.read(info.filename))
-    output.writestr(name, script)
+    for name, script in scripts.items():
+        output.writestr('scripts/startup/' + name, script)
 tmp.replace(p)
-print('PASS: runtime gains exactly one Python startup script; all original contents retained')
+print('PASS: two Python startup scripts added; all original runtime contents retained')

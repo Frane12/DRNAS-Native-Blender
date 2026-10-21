@@ -15,11 +15,14 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
     for name in sorted(payloads):
         if name == 'assets/blender_runtime.zip' and '--smooth-runtime' in sys.argv:
             with zipfile.ZipFile(io.BytesIO(original.read(name))) as before, zipfile.ZipFile(io.BytesIO(output.read(name))) as after:
-                added = 'scripts/startup/drnas_native_smooth_zoom.py'
-                assert set(after.namelist()) == set(before.namelist()) | {added}
+                added = {'scripts/startup/drnas_native_smooth_zoom.py'}
+                if '--save-exit' in sys.argv:
+                    added.add('scripts/startup/drnas_native_save_exit.py')
+                assert set(after.namelist()) == set(before.namelist()) | added
                 for entry in before.namelist():
                     assert before.read(entry) == after.read(entry), entry
-                assert after.read(added) == Path(__file__).with_name('drnas_native_smooth_zoom.py').read_bytes()
+                for name in added:
+                    assert after.read(name) == Path(__file__).with_name(Path(name).name).read_bytes()
             continue
         assert hashlib.sha256(original.read(name)).digest() == hashlib.sha256(output.read(name)).digest(), name
     dex = output.read("classes.dex")
@@ -35,6 +38,9 @@ with zipfile.ZipFile(sys.argv[1]) as original, zipfile.ZipFile(sys.argv[2]) as o
     if '--spring' in sys.argv:
         for name in (b'DrnasZoomSpring', b'drnasMouseRoot', b'drnasStopSpringZoom', b'Zatvori postavke'):
             assert name in dex, f'Missing spring/multitouch/settings feature: {name!r}'
+    if '--save-exit' in sys.argv:
+        for name in (b'drnasSaveAndExit', b'drnasPollSaveExit', b'cursor_percent', b'zoom_visible', b'drnasStyleKey'):
+            assert name in dex, f'Missing polished controls or safe exit: {name!r}'
     with tempfile.NamedTemporaryFile(suffix=".so") as lib:
         lib.write(output.read("lib/arm64-v8a/libblender.so"))
         lib.flush()

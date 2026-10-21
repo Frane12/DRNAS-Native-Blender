@@ -55,8 +55,8 @@ once("    drnasAttachGear(drnasMouseDock, true);",
 """    drnasAttachGear(drnasMouseDock, true);
     drnasInstallCompactWindows();
     final View viewport=getWindow().getDecorView();
-    viewport.addOnLayoutChangeListener((v,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom)->{
-      if ((right-left)==(oldRight-oldLeft) && (bottom-top)==(oldBottom-oldTop)) return;
+    viewport.addOnLayoutChangeListener((v,newLeft,newTop,newRight,newBottom,oldLeft,oldTop,oldRight,oldBottom)->{
+      if ((newRight-newLeft)==(oldRight-oldLeft) && (newBottom-newTop)==(oldBottom-oldTop)) return;
       v.post(()->{
         if (isFinishing()||isDestroyed()) return;
         drnasRefreshPanels();
@@ -93,6 +93,7 @@ once("  private void requestAllFilesAccess() {",
 
   private void drnasInstallCompactWindows() {
     if (drnasMouseDock==null || drnasKeyStrip==null) return;
+    final LinearLayout mouseDock=(LinearLayout)drnasMouseDock;
     // Rounded, clearly delineated, independent mini utility windows.
     android.graphics.drawable.GradientDrawable mouseBg=drnasPill(Color.argb(225,16,34,52));
     mouseBg.setStroke(dpDrnas(1),Color.argb(218,111,177,207));
@@ -102,15 +103,15 @@ once("  private void requestAllFilesAccess() {",
     drnasKeyStrip.setBackground(keysBg);
     drnasDockWindowChildren=new java.util.ArrayList<>();
     // Keep original drag grip visible even when the dock is collapsed.
-    for (int i=1;i<drnasMouseDock.getChildCount();i++)
-      drnasDockWindowChildren.add(drnasMouseDock.getChildAt(i));
+    for (int i=1;i<mouseDock.getChildCount();i++)
+      drnasDockWindowChildren.add(mouseDock.getChildAt(i));
     drnasDockGrip.setContentDescription("Drži i pomakni prozor miša");
     drnasDockMinimize=drnasUiLabel("▾");
     drnasDockMinimize.setTextSize(18);
     drnasDockMinimize.setGravity(Gravity.CENTER);
     drnasDockMinimize.setContentDescription("Smanji prozor miša");
     drnasDockMinimize.setBackground(drnasPill(Color.argb(220,43,73,97)));
-    drnasMouseDock.addView(drnasDockMinimize,
+    mouseDock.addView(drnasDockMinimize,
         new LinearLayout.LayoutParams(dpDrnas(32),dpDrnas(48)));
     drnasDockMinimize.setOnClickListener(v->drnasCompactMouseWindow(
         !drnasPrefs.getBoolean("mouse_window_minimized",false)));
